@@ -32,6 +32,7 @@ test("play's opts are the current synth's", () => {
   const h = hoverAt("use_synth :prophet\nplay 60, res‸: 0.5");
   assert.match(h!.markdown, /opt of the :prophet synth/);
   assert.match(hoverAt("play 60, rel‸ease: 2")!.markdown, /opt of the :beep synth/);
+  assert.match(hoverAt("use_synth :my_own\nplay 60, cut‸off: 80")!.markdown, /opt of play/);
 });
 
 test("an opt continued onto the next line keeps its owner", () => {

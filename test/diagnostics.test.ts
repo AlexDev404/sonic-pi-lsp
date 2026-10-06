@@ -35,6 +35,10 @@ test("play's checks are against the current synth, as a warning", () => {
   assert.match(d.message, /checked against the :prophet synth/);
 });
 
+test("play under an unknown synth is not range-checked", () => {
+  assert.deepEqual(check('load_synthdefs "~/s"\nuse_synth :mine\nplay 60, cutoff: 500'), []);
+});
+
 test("opts a synth or FX does not take are noted, not warned", () => {
   const [d] = check("with_fx :echo, room: 0.5 do\nend");
   assert.equal(d.severity, DiagnosticSeverity.Information);

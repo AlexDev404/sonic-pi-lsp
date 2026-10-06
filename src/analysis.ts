@@ -115,6 +115,21 @@ function withFnOpts(opts: Record<string, Opt>, fn: string): Record<string, Opt> 
   return out;
 }
 
+let anySynth: Record<string, Opt> | undefined;
+
+/** Every opt any synth takes, documented, without bounds: they differ between synths. */
+function anySynthOpts(): Record<string, Opt> {
+  if (!anySynth) {
+    anySynth = {};
+    for (const synth of Object.values(data.synths)) {
+      for (const [k, o] of Object.entries(synth.opts)) {
+        if (!(k in anySynth)) anySynth[k] = { doc: o.doc, slidable: o.slidable, bpmScale: o.bpmScale };
+      }
+    }
+  }
+  return anySynth;
+}
+
 const OWNS_OPTS = (w: string): boolean =>
   w === "with_fx" || w === "synth" || w === "control" || PLAY_FNS.has(w) || SAMPLE_FNS.has(w) ||
   Object.keys(own(data.functions, w)?.opts ?? {}).length > 0;
@@ -143,10 +158,11 @@ export function optOwner(context: string[], lines: string[], line: number, col: 
   }
   if (PLAY_FNS.has(fn) || fn === "control") {
     const name = currentSynthAt(lines, line, col);
-    const synth = own(data.synths, name);
     const base = fn === "control" ? "play" : fn;
+    const synth = own(data.synths, name);
     if (synth) return { label: `the :${name} synth`, kind: "synth", explicit: false, opts: withFnOpts(withFnOpts(synth.opts, base), "play"), ...at };
-    return { label: fn, kind: "fn", explicit: false, opts: withFnOpts(fnOpts(base), "play"), ...at };
+    // A synth this buffer doesn't know (a typo, or one it loads): any synth's opts, as `play`'s.
+    return { label: base, kind: "fn", explicit: false, opts: withFnOpts(withFnOpts(anySynthOpts(), base), "play"), ...at };
   }
   if (SAMPLE_FNS.has(fn)) return { label: "sample", kind: "sample", explicit: true, opts: withFnOpts(data.sampleOpts, fn), ...at };
   return { label: fn, kind: "fn", explicit: true, opts: fnOpts(fn), ...at };
