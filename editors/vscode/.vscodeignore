@@ -1,2 +1,7 @@
-prepare.mjs
-**/*.map
+# Only the bundles ship: out/extension.js (the client) and server/sonic-pi-lsp.cjs.
+**
+!out/extension.js
+!server/sonic-pi-lsp.cjs
+!package.json
+!README.md
+!LICENSE

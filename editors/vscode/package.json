@@ -15,7 +15,7 @@
   "categories": [
     "Programming Languages"
   ],
-  "main": "./extension.js",
+  "main": "./out/extension.js",
   "activationEvents": [
     "onLanguage:ruby"
   ],
@@ -48,7 +48,8 @@
     "vscode:prepublish": "node prepare.mjs",
     "package": "npx @vscode/vsce package"
   },
-  "dependencies": {
+  "devDependencies": {
+    "esbuild": "^0.28.2",
     "vscode-languageclient": "^10.1.2"
   }
 }
