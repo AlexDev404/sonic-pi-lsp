@@ -12,8 +12,10 @@ docs on hover, completion, signature help and checks for Sonic Pi code.
    { "lsp": { "sonic-pi-lsp": { "binary": { "path": "/path/to/sonic-pi-lsp" } } } }
    ```
 
-2. Install this folder as a dev extension: command palette → `zed: install dev extension` → choose
-   `editors/zed`. Zed builds it (Rust, `wasm32-wasip1`) and installs the Ruby language if needed.
+2. Install Zed's **Ruby** extension (the language this server attaches to), if you don't have it.
+
+3. Install this folder as a dev extension: command palette → `zed: install dev extension` → choose
+   `editors/zed`. Zed builds it (Rust, `wasm32-wasip1`; needs `rustup`).
 
 Zed runs the server alongside its other Ruby servers. To use it on its own for Ruby:
 

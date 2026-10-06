@@ -92,7 +92,8 @@ Install the [LSP](https://packagecontrol.io/packages/LSP) package, then in
 
 ## Kate
 
-**Settings → Configure Kate → LSP Client → User Server Settings**:
+**Settings → Configure Kate → LSP Client → User Server Settings** (this replaces Kate's default Ruby
+server for Ruby files):
 
 ```json
 {
