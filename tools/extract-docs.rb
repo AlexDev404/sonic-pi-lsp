@@ -70,6 +70,23 @@ opt_entry = lambda do |info, default|
   o
 end
 
+# Every opt a synth or FX takes, documented: arg_info, plus the `_slide`,
+# `_slide_shape` and `_slide_curve` variants that only arg_defaults and
+# info list.
+all_opts = lambda do |v|
+  defaults = v.arg_defaults
+  opts = {}
+  v.arg_info.each { |ak, info| opts[ak.to_s] = opt_entry.call(info, defaults[ak]) }
+  (defaults.keys - v.arg_info.keys).each do |ak|
+    i = (v.info[ak] rescue nil) || {}
+    vals = i[:validations] || []
+    bounds = vals.map { |x| x[2] }.compact.reduce({}) { |a, b| a.merge(b) }
+    info = { doc: i[:doc], bounds: bounds, constraints: vals.map { |x| x[1] }, bpm_scale: i[:bpm_scale] }
+    opts[ak.to_s] = opt_entry.call(info, defaults[ak])
+  end
+  opts
+end
+
 summary_of = ->(doc) { t = doc.to_s.gsub(/\s+/, " ").strip; t[/\A.+?[.!?](?=\s|\z)/] || t }
 
 instruments = lambda do |want_fx|
@@ -80,10 +97,7 @@ instruments = lambda do |want_fx|
     next unless is_fx == want_fx
     next if is_fx && k.to_s.include?("replace_")
     key = is_fx ? k.to_s.sub(/\Afx_/, "") : k.to_s
-    defaults = v.arg_defaults
-    opts = {}
-    v.arg_info.each { |ak, info| opts[ak.to_s] = opt_entry.call(info, defaults[ak]) }
-    res[key] = { "title" => v.name.to_s, "summary" => summary_of.call(v.doc), "doc" => v.doc.to_s.strip, "opts" => opts }
+    res[key] = { "title" => v.name.to_s, "summary" => summary_of.call(v.doc), "doc" => v.doc.to_s.strip, "opts" => all_opts.call(v) }
   end
   res.sort.to_h
 end
@@ -116,9 +130,7 @@ end
 functions = functions.sort.to_h
 
 # `sample` takes the stereo player's opts plus the ones the sampler handles itself.
-sample_opts = {}
-player = SonicPi::Synths::SynthInfo.get_all[:stereo_player]
-player.arg_info.each { |ak, info| sample_opts[ak.to_s] = opt_entry.call(info, player.arg_defaults[ak]) }
+sample_opts = all_opts.call(SonicPi::Synths::SynthInfo.get_all[:stereo_player])
 (functions.dig("sample", "opts") || {}).each { |k, d| sample_opts[k] ||= { "doc" => d } }
 
 samples = {}

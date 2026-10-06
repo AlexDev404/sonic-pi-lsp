@@ -17,7 +17,7 @@
   "scripts": {
     "build": "tsc -p . && node scripts/bundle.mjs",
     "typecheck": "tsc -p . --noEmit",
-    "test": "npm run build && node --test build/test/",
+    "test": "npm run build && node --test \"build/test/**/*.test.js\"",
     "extract-docs": "ruby tools/extract-docs.rb"
   },
   "dependencies": {
