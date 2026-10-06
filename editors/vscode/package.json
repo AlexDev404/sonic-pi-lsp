@@ -1,0 +1,54 @@
+{
+  "name": "sonic-pi-lsp",
+  "displayName": "Sonic Pi Language Support",
+  "description": "Sonic Pi docs on hover, completion, signature help and checks, from sonic-pi-lsp",
+  "version": "0.1.0",
+  "publisher": "sonic-pi-lsp",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlexDev404/sonic-pi-lsp"
+  },
+  "engines": {
+    "vscode": "^1.91.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:ruby"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "ruby",
+        "extensions": [
+          ".spi"
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Sonic Pi",
+      "properties": {
+        "sonicPi.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a sonic-pi-lsp executable to use instead of the one bundled with the extension."
+        },
+        "sonicPi.diagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Report unknown synth, FX and sample names, and opt values Sonic Pi would reject."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "node prepare.mjs",
+    "package": "npx @vscode/vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^10.1.2"
+  }
+}
