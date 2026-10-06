@@ -9,33 +9,64 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [18, 22]
+        node: [18, 22, 24]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
       - run: npm ci
       - run: npm test
       - run: node dist/sonic-pi-lsp.cjs --version
+      # 18 is the oldest Node the server supports (package.json engines).
+      # The server once, from one matrix entry: the bundle runs as is
+      # (`node sonic-pi-lsp.cjs`), the tarball installs with `npm install -g`.
+      - name: Package the server
+        if: matrix.node == 24
+        run: |
+          mkdir -p artifact
+          cp dist/sonic-pi-lsp.cjs artifact/
+          npm pack --pack-destination artifact
+      - uses: actions/upload-artifact@v7
+        if: matrix.node == 24
+        with:
+          name: sonic-pi-lsp
+          path: artifact/
+          if-no-files-found: error
 
   zed:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip1
       - run: cargo build --release --target wasm32-wasip1
         working-directory: editors/zed
+      # Laid out as Zed installs an extension: its manifest and extension.wasm.
+      - name: Package the extension
+        run: |
+          mkdir -p artifact
+          cp editors/zed/extension.toml editors/zed/README.md editors/zed/LICENSE artifact/
+          cp editors/zed/target/wasm32-wasip1/release/zed_sonic_pi.wasm artifact/extension.wasm
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sonic-pi-zed-extension
+          path: artifact/
+          if-no-files-found: error
 
   vscode:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
       - run: npm ci
-      - run: npm install && npx --yes @vscode/vsce package
+      - run: npm ci && npx --yes @vscode/vsce package
         working-directory: editors/vscode
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sonic-pi-lsp-vscode
+          path: editors/vscode/*.vsix
+          if-no-files-found: error
