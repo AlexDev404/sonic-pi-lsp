@@ -43,12 +43,17 @@ jobs:
           targets: wasm32-wasip1
       - run: cargo build --release --target wasm32-wasip1
         working-directory: editors/zed
-      # Laid out as Zed installs an extension: its manifest and extension.wasm.
+      # Laid out as Zed keeps an installed extension: extension.wasm, and the
+      # manifest with the [lib] entry Zed adds when it builds one itself
+      # (without it, Zed never loads the wasm).
       - name: Package the extension
         run: |
           mkdir -p artifact
-          cp editors/zed/extension.toml editors/zed/README.md editors/zed/LICENSE artifact/
+          cp editors/zed/README.md editors/zed/LICENSE artifact/
           cp editors/zed/target/wasm32-wasip1/release/zed_sonic_pi.wasm artifact/extension.wasm
+          api=$(grep -A1 '^name = "zed_extension_api"' editors/zed/Cargo.lock | sed -n 's/^version = "\(.*\)"/\1/p')
+          test -n "$api"
+          { cat editors/zed/extension.toml; printf '\n[lib]\nkind = "Rust"\nversion = "%s"\n' "$api"; } > artifact/extension.toml
       - uses: actions/upload-artifact@v7
         with:
           name: sonic-pi-zed-extension
