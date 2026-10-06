@@ -1,0 +1,7 @@
+node_modules/
+build/
+dist/
+*.vsix
+editors/vscode/out/
+editors/zed/target/
+editors/zed/extension.wasm
