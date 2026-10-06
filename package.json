@@ -16,19 +16,29 @@
   },
   "scripts": {
     "build": "tsc -p . && node scripts/bundle.mjs",
+    "prepare": "npm run build",
     "typecheck": "tsc -p . --noEmit",
-    "test": "npm run build && node --test \"build/test/**/*.test.js\"",
+    "test": "npm run build && node scripts/test.mjs",
     "extract-docs": "ruby tools/extract-docs.rb"
-  },
-  "dependencies": {
-    "vscode-languageserver": "^10.1.2",
-    "vscode-languageserver-textdocument": "^1.0.15"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
     "esbuild": "^0.28.2",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vscode-languageserver": "^10.1.2",
+    "vscode-languageserver-textdocument": "^1.0.15"
   },
   "type": "module",
-  "main": "dist/sonic-pi-lsp.cjs"
+  "main": "dist/sonic-pi-lsp.cjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlexDev404/sonic-pi-lsp"
+  },
+  "keywords": [
+    "sonic-pi",
+    "lsp",
+    "language-server",
+    "music",
+    "live-coding"
+  ]
 }
