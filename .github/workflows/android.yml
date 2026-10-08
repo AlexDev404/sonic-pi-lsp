@@ -1,0 +1,81 @@
+name: Android
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # The native core on Linux: Sonic Pi programs rendered to audio and checked.
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Tools
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+      - name: mruby and the runtime's bytecode
+        run: native/build-mruby.sh build/core
+      - name: The native core and its test
+        run: |
+          cmake -G Ninja -B build/native -S native -DSP_BUILD="$PWD/build/core" -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/native --target sonic_pi_render_test
+      - name: Render programs and check what they play
+        run: mkdir -p build/renders && cd build/renders && ../native/sonic_pi_render_test
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: sonic-pi-native-renders
+          path: build/renders/*.wav
+          if-no-files-found: warn
+
+  # The app: unit and screenshot tests, and the APKs.
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: "platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;29.0.14206865 cmake;3.31.6"
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Test and build
+        working-directory: android
+        run: ./gradlew --no-daemon :app:testDebugUnitTest -Proborazzi.test.record=true :app:assembleDebug :app:assembleRelease
+      - name: Name the APKs
+        run: |
+          mkdir -p apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk apk/sonic-pi-debug.apk
+          cp android/app/build/outputs/apk/release/app-release.apk apk/sonic-pi-release.apk
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sonic-pi-android-apk
+          path: apk/*.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: sonic-pi-android-screenshots
+          path: android/app/build/outputs/roborazzi/*.png
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: sonic-pi-android-test-reports
+          path: android/app/build/reports/tests
