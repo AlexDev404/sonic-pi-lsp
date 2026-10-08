@@ -1,0 +1,4 @@
+[submodule "sonic-pi"]
+	path = sonic-pi
+	url = https://github.com/AlexDev404/sonic-pi-lsp.git
+	branch = dev
