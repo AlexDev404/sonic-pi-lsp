@@ -10,7 +10,7 @@
 # `host` is mrbc (to compile the runtime's Ruby to bytecode) and the library
 # the desktop test of the native core links. native/build-mruby.sh runs this.
 RUNTIME = ENV.fetch("SP_RUNTIME")
-ANDROID_API = ENV.fetch("SP_ANDROID_API", "26")
+ANDROID_API = ENV.fetch("SP_ANDROID_API", "30")   # the app's minSdk: Android 11
 
 COMMON_GEMS = lambda do |conf|
   conf.gembox "stdlib"
