@@ -116,6 +116,10 @@ native/build-mruby.sh build/core
 cmake -B build/native -S native -DSP_BUILD="$PWD/build/core"
 cmake --build build/native --target sonic_pi_render_test
 build/native/sonic_pi_render_test
+
+# how hard a program works the core: every render and every turn of the runtime, timed
+cmake --build build/native --target sonic_pi_load_bench
+build/native/sonic_pi_load_bench native/test/programs/full_track.rb 120
 ```
 
 ## CI

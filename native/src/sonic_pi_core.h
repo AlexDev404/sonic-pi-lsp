@@ -64,6 +64,7 @@ struct Config {
     uint32_t maxRenderFrames = 4096;    // the largest buffer render() is asked for
     uint32_t inboxMB = 160;             // decoded samples live here (reserved lazily)
     uint32_t realTimeMemoryKB = 65536;  // scsynth's pool, as the web app asks for
+    bool preloadSynthdefs = true;       // every synthdef loaded from boot, in the background
 };
 
 class Core {
@@ -96,6 +97,17 @@ public:
     // moved on by the wall time since.
     double engineNow() const;
     double sampleRate() const { return mSampleRate; }
+
+    // How the schedule has kept up: sounds handed over after their time, and
+    // the time the schedule was held back to wait for a load. Worker thread.
+    struct Stats {
+        uint64_t sounds = 0;         // sounds handed to the engine
+        uint64_t late = 0;           // ... after their time had come
+        double worstLate = 0;        // seconds, the latest of them
+        uint64_t holds = 0;          // times the schedule waited for a load
+        double held = 0;             // seconds, all told
+    };
+    Stats stats() const { return mStats; }
     bool running() const { return mSessionRunning.load(); }
     bool booted() const { return mEmbed != nullptr; }
 
@@ -117,6 +129,7 @@ private:
 
     // Loads. The worker asks; the engine answers (pollEngine).
     void requestSynthdef(const std::string& name);
+    void preloadSynthdefs();
     void requestSample(int32_t bufnum, const std::string& file);
     void freeSample(int32_t bufnum);
     void processLoads();
@@ -163,8 +176,10 @@ private:
     std::deque<std::pair<int32_t, std::string>> mSampleQueue;
     std::deque<Sound> mWaiting;                       // sounds held back for a load, in order
     bool mPianoLoaded = false;
+    bool mPianoAsked = false;
     int32_t mNextOwnBuffer = 4000;                    // the host's own buffers (the piano table)
     std::map<int, std::string> mThreadNames;          // uid → name
+    Stats mStats;
 };
 
 } // namespace sonicpi

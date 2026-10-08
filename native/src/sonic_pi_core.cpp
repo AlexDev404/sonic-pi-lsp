@@ -232,6 +232,7 @@ bool Core::boot(const Config& config, std::string* error) {
 
     mClockNtp.store(ntpNow());
     mClockWallNs.store(steadyNs());
+    if (config.preloadSynthdefs) preloadSynthdefs();
     emit(Event::Engine, "Sonic Pi is ready: " + std::to_string(int(mSampleRate)) + " Hz");
     return true;
 }
@@ -301,7 +302,11 @@ void Core::turn(bool) {
         double shift = 0;
         if (t > 0 && t < now + kLateMargin) {
             shift = now + kLateMargin - t + 0.1;
+            mStats.holds++;
+            mStats.held += shift;
+            emit(Event::Engine, "Waited " + std::to_string(int(shift * 1000 + 0.5)) + " ms for a sound to load");
             sp_hold(shift);
+            retime(s.bundle, shift);
             for (auto& w : mWaiting) retime(w.bundle, shift);
             if (mNextWake >= 0) mNextWake += shift;
         }
@@ -422,15 +427,55 @@ bool Core::send(const std::vector<uint8_t>& osc) {
     return false;
 }
 
-void Core::sendSound(Sound& s, double) { send(s.bundle); }
+void Core::sendSound(Sound& s, double) {
+    mStats.sounds++;
+    const double t = bundleTime(s.bundle), late = engineNow() - t;
+    if (t > 0 && late > 0) {
+        mStats.late++;
+        mStats.worstLate = std::max(mStats.worstLate, late);
+    }
+    send(s.bundle);
+}
 
 // ── Loads ─────────────────────────────────────────────────────────────────
 
 void Core::requestSynthdef(const std::string& name) {
-    if (name.empty() || mDefsReady.count(name) || mDefsAsked.count(name)) return;
+    if (name.empty()) return;
+    // :piano's table is loaded when a sound first asks for it, preloaded synthdef or not
+    if (name == "sonic-pi-piano" && !mPianoLoaded && !mPianoAsked) { mPianoAsked = true; loadPianoTable(); }
+    if (mDefsReady.count(name)) return;
+    if (mDefsAsked.count(name)) {
+        // still waiting its turn among the preloads: a sound wants it now
+        if (auto it = std::find(mDefQueue.begin(), mDefQueue.end(), name); it != mDefQueue.end()) {
+            mDefQueue.erase(it);
+            mDefQueue.push_front(name);
+        }
+        return;
+    }
     mDefsAsked.insert(name);
-    mDefQueue.push_back(name);
-    if (name == "sonic-pi-piano" && !mPianoLoaded) loadPianoTable();
+    mDefQueue.push_front(name);
+}
+
+// Every synth and FX the app has, loaded in the background from boot, as the
+// desktop app loads them all when it starts: a sound never waits for its
+// synthdef (and the schedule never shifts) the first time a program uses it.
+// One at a time, as any load is; what a sound asks for goes first.
+void Core::preloadSynthdefs() {
+    const std::string dir = mConfig.assets + "/synthdefs";
+    DIR* d = opendir(dir.c_str());
+    if (!d) return;
+    std::vector<std::string> names;
+    while (dirent* ent = readdir(d)) {
+        const std::string file = ent->d_name;
+        if (endsWith(file, ".scsyndef")) names.push_back(file.substr(0, file.size() - 9));
+    }
+    closedir(d);
+    std::sort(names.begin(), names.end());
+    for (const auto& name : names) {
+        if (mDefsReady.count(name) || mDefsAsked.count(name)) continue;
+        mDefsAsked.insert(name);
+        mDefQueue.push_back(name);
+    }
 }
 
 void Core::requestSample(int32_t bufnum, const std::string& file) {

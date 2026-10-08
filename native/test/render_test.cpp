@@ -165,6 +165,21 @@ play chord(:e3, :minor), release: 2
     render(core, r, "sample :ambi_choir\n", 2.0);
     check(r.rms(0.6, 2.4) > 0.005, "and the next run still plays: rms " + std::to_string(r.rms(0.6, 2.4)));
 
+    std::printf("synths preloaded from boot: a new one plays without holding the schedule\n");
+    r.left.clear(); r.right.clear();
+    r.events.clear();
+    render(core, r, "sleep 2\n", 2.5);   // the preloads finish
+    r.left.clear(); r.right.clear();
+    r.events.clear();
+    render(core, r, "use_synth :hollow\nplay 60, release: 1\n", 1.5);
+    check(r.rms(0.5, 1.5) > 0.002, "audible: rms " + std::to_string(r.rms(0.5, 1.5)));
+    check(!r.said(Event::Engine, "Waited"), "nothing waited for a load");
+
+    std::printf(":piano, its synthdef preloaded, still gets its table\n");
+    r.left.clear(); r.right.clear();
+    render(core, r, "use_synth :piano\nplay 60\n", 2.0);
+    check(r.rms(0.5, 2.0) > 0.002, "audible: rms " + std::to_string(r.rms(0.5, 2.0)));
+
     std::printf("%s\n", failures ? "FAILED" : "all passed");
     return failures ? 1 : 0;
 }

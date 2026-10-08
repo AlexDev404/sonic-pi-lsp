@@ -24,9 +24,11 @@ jobs:
       - name: The native core and its test
         run: |
           cmake -G Ninja -B build/native -S native -DSP_BUILD="$PWD/build/core" -DCMAKE_BUILD_TYPE=Release
-          cmake --build build/native --target sonic_pi_render_test
+          cmake --build build/native --target sonic_pi_render_test sonic_pi_load_bench
       - name: Render programs and check what they play
         run: mkdir -p build/renders && cd build/renders && ../native/sonic_pi_render_test
+      - name: How hard a full track works the core
+        run: build/native/sonic_pi_load_bench native/test/programs/full_track.rb 120 | grep -Ev '^ +[0-9]+ '
       - uses: actions/upload-artifact@v7
         if: always()
         with:
