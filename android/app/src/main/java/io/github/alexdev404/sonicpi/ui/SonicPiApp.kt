@@ -168,7 +168,7 @@ fun SonicPiApp(state: AppUiState, actions: AppActions, initial: Destination = De
 }
 
 /**
- * The top bar: Sonic Pi's name, and the web version's toolbar glyphs, bare:
+ * The top bar: Sonic Pi's icon and name, and the web version's toolbar glyphs, bare:
  * run (pink while a program plays), stop, load and save; a menu for the rest.
  */
 @Composable
@@ -180,6 +180,8 @@ private fun TopBar(state: AppUiState, actions: AppActions) {
         Modifier.fillMaxWidth().background(p.Bar).padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        AppIcon(Modifier.size(30.dp))
+        Spacer(Modifier.width(10.dp))
         Text("Sonic Pi", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = p.Foreground)
         Spacer(Modifier.weight(1f))
         GlyphButton("run", R.drawable.ic_play, "Run", if (state.running) p.Pink else p.Foreground, ready, actions.run)
@@ -198,6 +200,16 @@ private fun TopBar(state: AppUiState, actions: AppActions) {
             }
         }
     }
+}
+
+/** Sonic Pi's own icon (app/web/web/data/icon-256.png), as the app's mark. */
+@Composable
+private fun AppIcon(modifier: Modifier) {
+    val assets = LocalContext.current.assets
+    val icon = remember(assets) {
+        runCatching { assets.open("sonicpi/gui/icon.png").use { BitmapFactory.decodeStream(it)?.asImageBitmap() } }.getOrNull()
+    }
+    if (icon != null) Image(icon, contentDescription = null, modifier = modifier)
 }
 
 @Composable

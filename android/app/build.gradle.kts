@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import java.awt.image.BufferedImage
 import java.security.MessageDigest
+import javax.imageio.ImageIO
 
 plugins {
     id("com.android.application")
@@ -119,6 +121,7 @@ abstract class PrepareSonicPiAssets : DefaultTask() {
         copyAll("app/gui/fonts", "fonts") { it.extension == "ttf" }
         // The web version's toolbar glyphs (masks, tinted by the theme), and the desktop's logo for the splash.
         for (g in listOf("run", "stop", "load", "save", "help")) copyOne("app/web/web/data/toolbar/$g.png", "gui/glyphs/$g.png")
+        copyOne("app/web/web/data/icon-256.png", "gui/icon.png")
         copyOne("app/gui/images/logo-transparent.png", "gui/logo-light.png")
         copyOne("app/gui/images/logo-transparent-dark.png", "gui/logo-dark.png")
 
@@ -137,14 +140,48 @@ val prepareSonicPiAssets = tasks.register<PrepareSonicPiAssets>("prepareSonicPiA
         sonicPi.resolve("etc/synthdefs/compiled"), sonicPi.resolve("etc/samples"), sonicPi.resolve("etc/buffers"),
         sonicPi.resolve("etc/examples"), sonicPi.resolve("app/web/web/data/reference"), sonicPi.resolve("app/web/web/data/completion.json"),
         sonicPi.resolve("app/external/piano/piano_wavetable.dat"), sonicPi.resolve("app/gui/fonts"),
-        sonicPi.resolve("app/web/web/data/toolbar"), sonicPi.resolve("app/gui/images/logo-transparent.png"),
+        sonicPi.resolve("app/web/web/data/toolbar"), sonicPi.resolve("app/web/web/data/icon-256.png"),
+        sonicPi.resolve("app/gui/images/logo-transparent.png"),
         sonicPi.resolve("app/gui/images/logo-transparent-dark.png"))
     outputDir.set(layout.buildDirectory.dir("generated/sonicpi-assets"))
+}
+
+// The app's icon is Sonic Pi's own (app/web/web/data/icon.png: π))) on pink):
+// as it is, and its white glyph alone as a mask, for Android's themed icons.
+abstract class PrepareSonicPiIcon : DefaultTask() {
+    @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val icon: RegularFileProperty
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun prepare() {
+        val dir = outputDir.get().asFile.resolve("drawable-nodpi")
+        dir.deleteRecursively()
+        dir.mkdirs()
+        val source = icon.get().asFile
+        source.copyTo(dir.resolve("sonic_pi_icon.png"))
+        val image = ImageIO.read(source)
+        val mono = BufferedImage(image.width, image.height, BufferedImage.TYPE_INT_ARGB)
+        for (y in 0 until image.height) for (x in 0 until image.width) {
+            val argb = image.getRGB(x, y)
+            val a = argb ushr 24
+            val least = minOf((argb shr 16) and 0xff, (argb shr 8) and 0xff, argb and 0xff)
+            // white is the glyph; the pink (whose least channel is its green, ~47) is not
+            val glyph = (((least - 120) * 255) / 135).coerceIn(0, 255) * a / 255
+            mono.setRGB(x, y, (glyph shl 24) or 0xffffff)
+        }
+        ImageIO.write(mono, "png", dir.resolve("sonic_pi_icon_mono.png"))
+    }
+}
+
+val prepareSonicPiIcon = tasks.register<PrepareSonicPiIcon>("prepareSonicPiIcon") {
+    icon.set(sonicPi.resolve("app/web/web/data/icon.png"))
+    outputDir.set(layout.buildDirectory.dir("generated/sonicpi-res"))
 }
 
 androidComponents {
     onVariants { variant ->
         variant.sources.assets?.addGeneratedSourceDirectory(prepareSonicPiAssets, PrepareSonicPiAssets::outputDir)
+        variant.sources.res?.addGeneratedSourceDirectory(prepareSonicPiIcon, PrepareSonicPiIcon::outputDir)
     }
 }
 

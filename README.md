@@ -53,7 +53,7 @@ The app is made for a phone, in Sonic Pi's design language:
 - **Layout:** a top bar, with tabs at the bottom (a rail on a tablet).
 - **Colours:** the desktop's light and dark themes (`sonicpitheme.cpp`). The dark theme sits on the desktop's editor grey, with a slightly softer pink.
 - **Light or dark:** the app follows the phone's mode.
-- **Icons:** the toolbar glyphs (▶ ■ + ⌐ Δ) are the web version's own, tinted as it tints them.
+- **Icons:** the toolbar glyphs (▶ ■ + ⌐ Δ) are the web version's own, tinted as it tints them. The app's icon, in the launcher and the top bar, is Sonic Pi's own, from the submodule; the build also cuts out its white glyph for Android's themed icons.
 
 - **Code.**
   - The top bar has run, which turns pink while a program plays, plus stop, load and save. A menu holds text size and clear log.

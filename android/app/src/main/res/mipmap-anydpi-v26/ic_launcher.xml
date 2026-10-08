@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Sonic Pi's icon (app/web/web/data/icon.png, packaged by prepareSonicPiIcon) on its own pink. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@android:color/black" />
-    <foreground android:drawable="@drawable/ic_launcher_foreground" />
-    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+    <background android:drawable="@color/sonic_pi_icon_pink" />
+    <foreground>
+        <inset android:drawable="@drawable/sonic_pi_icon" android:inset="14%" />
+    </foreground>
+    <monochrome>
+        <inset android:drawable="@drawable/sonic_pi_icon_mono" android:inset="14%" />
+    </monochrome>
 </adaptive-icon>

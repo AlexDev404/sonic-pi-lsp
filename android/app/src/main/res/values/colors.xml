@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The pink of Sonic Pi's icon, behind it where a launcher's mask is larger than the icon. -->
+    <color name="sonic_pi_icon_pink">#FFFF2F93</color>
+</resources>
