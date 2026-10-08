@@ -77,6 +77,13 @@ import io.github.alexdev404.sonicpi.engine.LogEntry
 import io.github.alexdev404.sonicpi.engine.LogKind
 import io.github.alexdev404.sonicpi.ui.editor.CodeEditor
 import io.github.alexdev404.sonicpi.ui.editor.KeyBar
+import io.github.alexdev404.sonicpi.ui.editor.completion.CompletionEngine
+import io.github.alexdev404.sonicpi.ui.editor.completion.DocSheet
+import io.github.alexdev404.sonicpi.ui.editor.completion.SuggestionList
+import io.github.alexdev404.sonicpi.ui.editor.completion.WordInfo
+import io.github.alexdev404.sonicpi.ui.editor.completion.WordStrip
+import io.github.alexdev404.sonicpi.ui.editor.completion.accept
+import io.github.alexdev404.sonicpi.ui.editor.completion.info
 import io.github.alexdev404.sonicpi.ui.learn.LearnScreen
 import io.github.alexdev404.sonicpi.ui.log.LogView
 import io.github.alexdev404.sonicpi.ui.theme.LocalCodeFont
@@ -101,6 +108,8 @@ data class AppUiState(
     val sections: List<LibrarySection>,
     val canUndo: Boolean,
     val canRedo: Boolean,
+    /** Sonic Pi's completion, once its data is read. */
+    val completion: CompletionEngine? = null,
 )
 
 /** Everything the screens can ask for. */
@@ -271,16 +280,37 @@ private fun CodePane(state: AppUiState, actions: AppActions, showPeek: Boolean, 
         AnimatedVisibility(visible = state.errorLine > 0 && lastError != null) {
             Banner("Line ${state.errorLine}: ${lastError?.text.orEmpty()}", error = true)
         }
+        val value = state.buffers[state.current]
+        // Offered as code is typed, as Sonic Pi's editor offers it: not when the caret is only moved.
+        var typing by remember { mutableStateOf(false) }
+        var sheet by remember { mutableStateOf<WordInfo?>(null) }
+        val engine = state.completion
+        val caret = value.selection.start
+        val suggestions = remember(engine, value.text, caret, typing) {
+            if (engine == null || !typing || !value.selection.collapsed) null else engine.suggest(value.text, caret)
+        }
+        val word = remember(engine, value.text, caret) {
+            if (engine == null || !value.selection.collapsed) null else engine.infoAt(value.text, caret)
+        }
         CodeEditor(
-            value = state.buffers[state.current],
-            onValueChange = actions.edit,
+            value = value,
+            onValueChange = { typing = it.text != value.text; actions.edit(it) },
             functions = state.functions,
             fontSize = state.fontSize.sp,
             errorLine = state.errorLine,
             modifier = Modifier.weight(1f).fillMaxWidth(),
         )
-        if (showPeek) LogPeek(state.log, onPeek)
-        KeyBar(onInsert = actions.insert, onUndo = actions.undo, onRedo = actions.redo, canUndo = state.canUndo, canRedo = state.canRedo)
+        when {
+            suggestions != null -> SuggestionList(
+                suggestions,
+                onAccept = { item -> typing = true; actions.edit(accept(value, suggestions, item)) },
+                onInfo = { sheet = it.info() },
+            )
+            word != null -> WordStrip(word, onOpen = { sheet = word })
+            showPeek -> LogPeek(state.log, onPeek)
+        }
+        sheet?.let { DocSheet(it, state.functions, onDismiss = { sheet = null }) }
+        KeyBar(onInsert = { typing = true; actions.insert(it) }, onUndo = actions.undo, onRedo = actions.redo, canUndo = state.canUndo, canRedo = state.canRedo)
     }
 }
 

@@ -2,7 +2,13 @@
 package io.github.alexdev404.sonicpi
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.test.core.app.ApplicationProvider
@@ -52,6 +58,7 @@ class ScreenshotTest {
         return AppUiState(
             status = EngineStatus.Ready, running = true, log = log, buffers = buffers, current = 0, errorLine = 0,
             fontSize = 14, functions = library.functionNames, sections = library.sections, canUndo = true, canRedo = false,
+            completion = library.completion,
         )
     }
 
@@ -80,6 +87,28 @@ class ScreenshotTest {
 
     @Config(qualifiers = "w411dp-h891dp-xxhdpi")
     @Test fun phoneBooting() = shoot("phone-booting", Destination.Code, state().copy(status = EngineStatus.Preparing(0.42f, "Unpacking sounds")))
+
+    /** Typing in the editor: what Sonic Pi offers for the slot (the synth's own opts after `play`). */
+    @Config(qualifiers = "w411dp-h891dp-xxhdpi")
+    @Test fun phoneSuggestions() {
+        val start = "use_synth :prophet\nplay 60, "
+        compose.setContent {
+            var s by remember { mutableStateOf(state().let { it.copy(buffers = listOf(TextFieldValue(start, TextRange(start.length))) + it.buffers.drop(1)) }) }
+            SonicPiTheme {
+                SonicPiApp(s, AppActions(edit = { v -> s = s.copy(buffers = listOf(v) + s.buffers.drop(1)) }), initial = Destination.Code)
+            }
+        }
+        compose.onNodeWithContentDescription("Code editor").performTextInput("c")
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/phone-suggestions.png")
+    }
+
+    /** The caret on a word: what it is, under the code. */
+    @Config(qualifiers = "w411dp-h891dp-xxhdpi")
+    @Test fun phoneWordDocs() {
+        val s = state()
+        val code = "use_synth :prophet\nlive_loop :melody do\n  play :e3, release: 0.3\n  sleep 0.25\nend\n"
+        shoot("phone-word-docs", Destination.Code, s.copy(buffers = listOf(TextFieldValue(code, TextRange(14))) + s.buffers.drop(1)))
+    }
 
     @Config(qualifiers = "w1280dp-h800dp-xhdpi")
     @Test fun tabletCode() = shoot("tablet-code", Destination.Code)

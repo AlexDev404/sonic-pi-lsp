@@ -86,7 +86,7 @@ kotlin {
 // Under assets/sonicpi/: the synthdefs, samples, random tables and piano
 // table the engine reads (extracted to the app's private storage on first
 // launch, since the engine opens files by path), the example programs, the
-// language reference for the Learn screen, and the Hack font Sonic Pi's
+// language reference for the Learn screen, the editor's completion data, and the Hack font Sonic Pi's
 // editor uses. manifest.txt lists every file with its size, and its hash is
 // the version the app compares to decide whether to extract again.
 abstract class PrepareSonicPiAssets : DefaultTask() {
@@ -115,6 +115,7 @@ abstract class PrepareSonicPiAssets : DefaultTask() {
         copyOne("app/external/piano/piano_wavetable.dat", "piano_wavetable.dat")
         copyAll("etc/examples", "examples") { it.extension == "rb" }
         for (ref in listOf("lang", "synths", "fx", "samples")) copyOne("app/web/web/data/reference/$ref.json", "reference/$ref.json")
+        copyOne("app/web/web/data/completion.json", "completion.json")
         copyOne("app/gui/fonts/Hack-Regular.ttf", "fonts/Hack-Regular.ttf")
         copyOne("app/gui/fonts/Hack-Bold.ttf", "fonts/Hack-Bold.ttf")
 
@@ -129,7 +130,7 @@ val prepareSonicPiAssets = tasks.register<PrepareSonicPiAssets>("prepareSonicPiA
     sonicPiRoot.set(sonicPi)
     sources.from(
         sonicPi.resolve("etc/synthdefs/compiled"), sonicPi.resolve("etc/samples"), sonicPi.resolve("etc/buffers"),
-        sonicPi.resolve("etc/examples"), sonicPi.resolve("app/web/web/data/reference"),
+        sonicPi.resolve("etc/examples"), sonicPi.resolve("app/web/web/data/reference"), sonicPi.resolve("app/web/web/data/completion.json"),
         sonicPi.resolve("app/external/piano/piano_wavetable.dat"), sonicPi.resolve("app/gui/fonts"))
     outputDir.set(layout.buildDirectory.dir("generated/sonicpi-assets"))
 }

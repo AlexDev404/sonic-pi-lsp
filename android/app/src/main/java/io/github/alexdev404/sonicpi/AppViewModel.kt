@@ -15,6 +15,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.alexdev404.sonicpi.data.BufferStore
 import io.github.alexdev404.sonicpi.data.Library
 import io.github.alexdev404.sonicpi.data.LibrarySection
+import io.github.alexdev404.sonicpi.ui.editor.completion.CompletionEngine
 import io.github.alexdev404.sonicpi.engine.LogKind
 import io.github.alexdev404.sonicpi.engine.NativeEngine
 import io.github.alexdev404.sonicpi.ui.editor.insert
@@ -42,6 +43,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var sections by mutableStateOf<List<LibrarySection>>(emptyList())
         private set
+    var completion by mutableStateOf<CompletionEngine?>(null)
+        private set
 
     // Undo and redo, per buffer: snapshots, a burst of typing as one step.
     private val undo = List(BufferStore.COUNT) { ArrayDeque<TextFieldValue>() }
@@ -61,6 +64,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val library = withContext(Dispatchers.IO) { Library(app.assets).also { it.sections } }
             functions = library.functionNames
             sections = library.sections
+            completion = withContext(Dispatchers.Default) { library.completion }
         }
         // An error after a Run marks its line in the buffer that ran.
         viewModelScope.launch {

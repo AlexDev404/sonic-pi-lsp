@@ -2,6 +2,8 @@
 package io.github.alexdev404.sonicpi.data
 
 import android.content.res.AssetManager
+import io.github.alexdev404.sonicpi.ui.editor.completion.CompletionData
+import io.github.alexdev404.sonicpi.ui.editor.completion.CompletionEngine
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -37,6 +39,15 @@ class Library(private val assets: AssetManager) {
 
     /** Every function name, for the editor's highlighting. */
     val functionNames: Set<String> by lazy { functions().map { it.key }.toSet() }
+
+    /** What the editor offers as code is typed: Sonic Pi's completion data (completion.json) and the reference's names. */
+    val completion: CompletionEngine by lazy {
+        fun text(name: String) = assets.open("sonicpi/$name").bufferedReader().readText()
+        CompletionEngine(CompletionData.parse(
+            text("completion.json"), text("reference/lang.json"), text("reference/synths.json"),
+            text("reference/fx.json"), text("reference/samples.json"),
+        ))
+    }
 
     private fun json(name: String) = JSONObject(assets.open("sonicpi/reference/$name.json").bufferedReader().readText())
 

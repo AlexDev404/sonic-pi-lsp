@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
                         status = status, running = running, log = log,
                         buffers = vm.buffers, current = vm.current, errorLine = vm.errorLine, fontSize = vm.fontSize,
                         functions = vm.functions, sections = vm.sections, canUndo = vm.canUndo, canRedo = vm.canRedo,
+                        completion = vm.completion,
                     ),
                     actions = AppActions(
                         run = vm::run, stop = vm::stop, selectBuffer = vm::selectBuffer, edit = vm::edit, insert = vm::insert,
