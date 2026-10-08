@@ -7,7 +7,7 @@ the device, with no server and no network.
 <p>
   <img src="docs/screenshots/phone-code.png" width="220" alt="The code editor on a phone">
   <img src="docs/screenshots/phone-suggestions.png" width="220" alt="Suggestions while typing">
-  <img src="docs/screenshots/phone-log.png" width="220" alt="The log">
+  <img src="docs/screenshots/phone-code-light.png" width="220" alt="The light theme">
 </p>
 
 ## How it works
@@ -49,10 +49,16 @@ build. `.gitmodules` sets `ignore = dirty` so this doesn't clutter
 
 ## The app
 
+The app looks like Sonic Pi's desktop app. It uses the desktop's light and
+dark themes, with their exact colours from `sonicpitheme.cpp`, and follows
+the phone's light or dark mode. Its toolbar buttons and logo are the
+desktop's own images, taken from the submodule.
+
 - **Code.**
-  - There are ten buffers, as on the desktop. They are saved as you type.
-  - The editor has Sonic Pi's syntax colours, its Hack font, line numbers, auto-indent, and an error line marked after a failed run.
-  - A bar above the keyboard has the symbols code needs, plus undo, redo and indent.
+  - The toolbar has run, stop, load and save, plus text size on wider screens, and help.
+  - There are ten buffers, as on the desktop, in a `|0| |1| … |9|` strip under the editor. They are saved as you type.
+  - The editor has Sonic Pi's syntax colours and its Hack font. Line numbers are in italics, the caret's line is marked, and there is a `Line: N, Position: M` readout. New lines are auto-indented, and the line of an error is marked after a failed run.
+  - While the keyboard is open, a bar above it has the symbols code needs, plus undo, redo and indent.
 - **IntelliSense.**
   - What the editor offers as you type is what Sonic Pi's desktop editor offers. It uses a port of upstream's completion engine (`app/web/app/src/completion`, itself ported from the desktop's `completion_context.cpp`) on the same `completion.json`. Examples:
     - samples after `sample`
@@ -63,8 +69,14 @@ build. `.gitmodules` sets `ignore = dirty` so this doesn't clutter
     - function names once two letters are typed
   - Ranking uses the desktop's fuzzy matching.
   - Put the caret on a function, synth, FX, sample or opt and a line under the code says what it is. Tap the line, or the ⓘ on a suggestion, to open the full doc.
-- **Log.** It shows what played, each `puts`, cues and errors, coloured by kind. On a tablet it sits beside the editor.
-- **Learn.** This holds the example programs and the reference for functions, synths, FX and samples. Examples open into a buffer, and tapping a sample plays it.
+- **Log and cues.**
+  - The log uses the desktop's format: a `{run: 1, time: 0.5, thread: :drums}` header for each moment, with what played beneath it on `├─`/`└─` branches.
+  - The cues pane lists every cued path.
+  - On a phone, both sit under the code and can be resized with grips. On a tablet they sit beside the code, as the desktop's side column does.
+- **Help.**
+  - The desktop's help panel, opened with the toolbar's help button. Pill tabs switch between Examples, Lang, Synths, Fx and Samples.
+  - Each tab has a filter and a list, and each page has a pink title and rule.
+  - Code opens into the current buffer, and tapping a sample plays it.
 
 ### Android 16 and storage
 

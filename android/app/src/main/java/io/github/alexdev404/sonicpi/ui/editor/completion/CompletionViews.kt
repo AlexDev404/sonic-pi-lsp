@@ -46,10 +46,11 @@ import io.github.alexdev404.sonicpi.ui.theme.LocalCodeFont
 import io.github.alexdev404.sonicpi.ui.theme.SonicPiColors
 
 /** A kind's colour: the colour the code gives what it inserts (cm.js's badges). */
+@Composable
 internal fun Kind.colour(): Color = when (this) {
     Kind.Synth, Kind.Fx, Kind.Sample -> SonicPiColors.Pink
     Kind.Note, Kind.Chord, Kind.Scale -> SonicPiColors.Blue
-    Kind.Opt, Kind.OptVal -> SonicPiColors.Yellow
+    Kind.Opt, Kind.OptVal -> SonicPiColors.Keyword
     else -> SonicPiColors.Green
 }
 
@@ -78,7 +79,7 @@ fun SuggestionList(
 ) {
     val state = rememberLazyListState()
     LaunchedEffect(suggestions.from, suggestions.items.firstOrNull()) { state.scrollToItem(0) }
-    Surface(color = SonicPiColors.Raised, modifier = modifier.fillMaxWidth()) {
+    Surface(color = SonicPiColors.Base, modifier = modifier.fillMaxWidth()) {
         LazyColumn(state = state, modifier = Modifier.heightIn(max = 184.dp).semantics { contentDescription = "Suggestions" }) {
             itemsIndexed(suggestions.items, key = { i, it -> "$i ${it.text}" }) { i, item ->
                 val first = i == 0
@@ -95,16 +96,16 @@ fun SuggestionList(
                     Spacer(Modifier.width(10.dp))
                     Text(
                         item.text, fontFamily = LocalCodeFont.current, fontSize = 15.sp, maxLines = 1,
-                        color = if (item.kind in setOf(Kind.Synth, Kind.Fx, Kind.Sample)) SonicPiColors.Pink else SonicPiColors.Text,
+                        color = if (item.kind in setOf(Kind.Synth, Kind.Fx, Kind.Sample)) SonicPiColors.Pink else SonicPiColors.Foreground,
                     )
                     Spacer(Modifier.width(12.dp))
                     Text(
-                        item.summary, style = MaterialTheme.typography.bodySmall, color = SonicPiColors.Dim,
+                        item.summary, style = MaterialTheme.typography.bodySmall, color = SonicPiColors.Muted,
                         maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
                     )
                     if (item.doc.isNotEmpty()) {
                         IconButton(onClick = { onInfo(item) }, modifier = Modifier.semantics { contentDescription = "About ${item.text}" }) {
-                            Text("ⓘ", color = SonicPiColors.Dim, fontSize = 18.sp)
+                            Text("ⓘ", color = SonicPiColors.Muted, fontSize = 18.sp)
                         }
                     }
                 }
@@ -122,7 +123,7 @@ fun WordStrip(info: WordInfo, onOpen: () -> Unit, modifier: Modifier = Modifier)
     Row(
         modifier
             .fillMaxWidth()
-            .background(SonicPiColors.Raised)
+            .background(SonicPiColors.Base)
             .clickable(onClick = onOpen)
             .padding(horizontal = 10.dp, vertical = 8.dp)
             .semantics { contentDescription = "${info.title}: ${info.summary}. Open its doc" },
@@ -132,9 +133,9 @@ fun WordStrip(info: WordInfo, onOpen: () -> Unit, modifier: Modifier = Modifier)
         Spacer(Modifier.width(10.dp))
         Text(info.title, fontFamily = LocalCodeFont.current, fontSize = 14.sp, color = info.kind.colour(), fontWeight = FontWeight.Bold, maxLines = 1)
         Spacer(Modifier.width(10.dp))
-        Text(info.summary, style = MaterialTheme.typography.bodySmall, color = SonicPiColors.Dim, maxLines = 1,
+        Text(info.summary, style = MaterialTheme.typography.bodySmall, color = SonicPiColors.Muted, maxLines = 1,
             overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Text("ⓘ", color = SonicPiColors.Dim, fontSize = 18.sp, modifier = Modifier.padding(start = 6.dp))
+        Text("ⓘ", color = SonicPiColors.Muted, fontSize = 18.sp, modifier = Modifier.padding(start = 6.dp))
     }
 }
 
@@ -142,7 +143,7 @@ fun WordStrip(info: WordInfo, onOpen: () -> Unit, modifier: Modifier = Modifier)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DocSheet(info: WordInfo, functions: Set<String>, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SonicPiColors.Editor) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = SonicPiColors.Base) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -153,19 +154,19 @@ fun DocSheet(info: WordInfo, functions: Set<String>, onDismiss: () -> Unit) {
                 Text(info.title, style = MaterialTheme.typography.headlineSmall, fontFamily = LocalCodeFont.current, color = SonicPiColors.Pink)
             }
             if (info.summary.isNotEmpty() && info.summary != info.title) {
-                Text(info.summary, style = MaterialTheme.typography.titleMedium, color = SonicPiColors.Text)
+                Text(info.summary, style = MaterialTheme.typography.titleMedium, color = SonicPiColors.Foreground)
             }
             if (info.usage.isNotEmpty()) {
                 Text(
-                    remember(info.usage, functions) { Highlighter.highlight(info.usage, functions) },
-                    fontFamily = LocalCodeFont.current, fontSize = 14.sp, color = SonicPiColors.Text,
-                    modifier = Modifier.fillMaxWidth().background(SonicPiColors.Black, RoundedCornerShape(6.dp)).padding(12.dp),
+                    SonicPiColors.let { p -> remember(info.usage, functions, p) { Highlighter.highlight(info.usage, functions, p) } },
+                    fontFamily = LocalCodeFont.current, fontSize = 14.sp, color = SonicPiColors.Foreground,
+                    modifier = Modifier.fillMaxWidth().background(SonicPiColors.Background, RoundedCornerShape(6.dp)).padding(12.dp),
                 )
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Text(
                 remember(info.doc) { AnnotatedString.fromHtml(info.doc.replace(Regex("<table[\\s\\S]*?</table>"), "")) },
-                style = MaterialTheme.typography.bodyLarge, color = SonicPiColors.Text,
+                style = MaterialTheme.typography.bodyLarge, color = SonicPiColors.Foreground,
             )
         }
     }

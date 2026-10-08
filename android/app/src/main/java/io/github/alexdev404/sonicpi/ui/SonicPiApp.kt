@@ -1,58 +1,30 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package io.github.alexdev404.sonicpi.ui
 
+import android.graphics.BitmapFactory
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.NavigationRailItemDefaults
-import androidx.compose.material3.OutlinedIconButton
-import androidx.compose.material3.PrimaryScrollableTabRow
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,20 +33,25 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.alexdev404.sonicpi.R
 import io.github.alexdev404.sonicpi.data.LibrarySection
 import io.github.alexdev404.sonicpi.engine.EngineStatus
 import io.github.alexdev404.sonicpi.engine.LogEntry
 import io.github.alexdev404.sonicpi.engine.LogKind
+import io.github.alexdev404.sonicpi.ui.editor.BufferStrip
 import io.github.alexdev404.sonicpi.ui.editor.CodeEditor
 import io.github.alexdev404.sonicpi.ui.editor.KeyBar
 import io.github.alexdev404.sonicpi.ui.editor.completion.CompletionEngine
@@ -84,16 +61,17 @@ import io.github.alexdev404.sonicpi.ui.editor.completion.WordInfo
 import io.github.alexdev404.sonicpi.ui.editor.completion.WordStrip
 import io.github.alexdev404.sonicpi.ui.editor.completion.accept
 import io.github.alexdev404.sonicpi.ui.editor.completion.info
+import io.github.alexdev404.sonicpi.ui.editor.lineNumberAt
 import io.github.alexdev404.sonicpi.ui.learn.LearnScreen
+import io.github.alexdev404.sonicpi.ui.log.CuesView
 import io.github.alexdev404.sonicpi.ui.log.LogView
+import io.github.alexdev404.sonicpi.ui.log.PaneTitle
 import io.github.alexdev404.sonicpi.ui.theme.LocalCodeFont
+import io.github.alexdev404.sonicpi.ui.theme.LocalToolbar
 import io.github.alexdev404.sonicpi.ui.theme.SonicPiColors
 
-enum class Destination(val label: String, val icon: Int) {
-    Code("Code", R.drawable.ic_code),
-    Log("Log", R.drawable.ic_log),
-    Learn("Learn", R.drawable.ic_learn),
-}
+/** What fills the screen first: the code, the log in full (on a phone), or the help. */
+enum class Destination { Code, Log, Learn }
 
 /** Everything the screens show. */
 data class AppUiState(
@@ -132,10 +110,11 @@ data class AppActions(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SonicPiApp(state: AppUiState, actions: AppActions, initial: Destination = Destination.Code) {
-    var destination by rememberSaveable { mutableStateOf(initial) }
+    val p = SonicPiColors
+    var help by rememberSaveable { mutableStateOf(initial == Destination.Learn) }
+    var pane by rememberSaveable { mutableStateOf(if (initial == Destination.Log) PaneSize.Full else PaneSize.Normal) }
     val width = LocalConfiguration.current.screenWidthDp
-    val wide = width >= 600           // a rail beside the content
-    val split = width >= 840          // the log beside the editor
+    val desk = width >= 840            // the desktop's layout: the log beside the code, help under both
     val keyboard = WindowInsets.isImeVisible
 
     if (state.status is EngineStatus.Preparing) {
@@ -143,142 +122,149 @@ fun SonicPiApp(state: AppUiState, actions: AppActions, initial: Destination = De
         return
     }
 
-    Scaffold(
-        containerColor = SonicPiColors.Black,
-        topBar = { TopBar(state, actions, destination) },
-        bottomBar = {
-            if (!wide && !(keyboard && destination == Destination.Code)) {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                    for (d in Destination.entries) {
-                        NavigationBarItem(
-                            selected = d == destination,
-                            onClick = { destination = d },
-                            icon = { Icon(painterResource(d.icon), contentDescription = null) },
-                            label = { Text(d.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedIconColor = Color.White, selectedTextColor = SonicPiColors.Pink,
-                            ),
-                        )
-                    }
+    Column(Modifier.fillMaxSize().background(p.Background).windowInsetsPadding(WindowInsets.safeDrawing)) {
+        Toolbar(actions, help = help, onHelp = { help = !help }, sizes = width >= 600)
+        if (desk) {
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                CodePane(state, actions, keyboard, Modifier.weight(0.62f))
+                VerticalRule()
+                Column(Modifier.weight(0.38f).fillMaxHeight()) {
+                    LogView(state.log, Modifier.weight(2f).fillMaxWidth())
+                    HorizontalRule()
+                    CuesView(state.log, Modifier.weight(1f).fillMaxWidth())
                 }
             }
-        },
-    ) { padding ->
-        Row(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
-            if (wide) {
-                NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                    Spacer(Modifier.height(8.dp))
-                    for (d in Destination.entries) {
-                        NavigationRailItem(
-                            selected = d == destination,
-                            onClick = { destination = d },
-                            icon = { Icon(painterResource(d.icon), contentDescription = null) },
-                            label = { Text(d.label) },
-                            colors = NavigationRailItemDefaults.colors(
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedIconColor = Color.White, selectedTextColor = SonicPiColors.Pink,
-                            ),
-                        )
-                    }
-                }
+            if (help) {
+                HorizontalRule()
+                HelpPanel(state, actions, onOpened = { help = false }, modifier = Modifier.weight(0.8f))
             }
-            Box(Modifier.weight(1f).fillMaxHeight()) {
-                when (destination) {
-                    Destination.Code -> Row(Modifier.fillMaxSize()) {
-                        CodePane(state, actions, showPeek = !split && !keyboard, onPeek = { destination = Destination.Log },
-                            modifier = Modifier.weight(if (split) 0.62f else 1f))
-                        if (split) {
-                            VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            LogView(state.log, Modifier.weight(0.38f))
-                        }
-                    }
-                    Destination.Log -> LogView(state.log, Modifier.fillMaxSize())
-                    Destination.Learn -> LearnScreen(
-                        state.sections, state.functions,
-                        onOpenCode = { actions.openCode(it); destination = Destination.Code },
-                        onPlay = actions.play,
-                    )
-                }
+        } else if (help) {
+            HelpPanel(state, actions, onOpened = { help = false }, modifier = Modifier.weight(1f))
+        } else {
+            val showPane = !keyboard
+            if (pane != PaneSize.Full || !showPane) CodePane(state, actions, keyboard, Modifier.weight(1f))
+            if (showPane) {
+                HorizontalRule()
+                SidePane(
+                    state.log, pane, onSize = { pane = it }, onClear = actions.clearLog,
+                    modifier = when (pane) {
+                        PaneSize.Full -> Modifier.weight(1f)
+                        PaneSize.Normal -> Modifier.fillMaxHeight(0.3f)
+                        PaneSize.Small -> Modifier
+                    },
+                )
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TopBar(state: AppUiState, actions: AppActions, destination: Destination) {
-    var menu by remember { mutableStateOf(false) }
-    val ready = state.status == EngineStatus.Ready
-    TopAppBar(
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = SonicPiColors.Black),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Sonic Pi", fontWeight = FontWeight.Bold)
-                if (state.running) {
-                    Spacer(Modifier.width(10.dp))
-                    PlayingDot()
-                }
-            }
-        },
-        actions = {
-            OutlinedIconButton(onClick = actions.stop, enabled = ready && state.running) {
-                Icon(painterResource(R.drawable.ic_stop), contentDescription = "Stop")
-            }
-            Spacer(Modifier.width(8.dp))
-            Button(
-                onClick = actions.run,
-                enabled = ready,
-                colors = ButtonDefaults.buttonColors(containerColor = SonicPiColors.Pink),
-            ) {
-                Icon(painterResource(R.drawable.ic_play), contentDescription = null)
-                Spacer(Modifier.width(4.dp))
-                Text("Run")
-            }
-            IconButton(onClick = { menu = true }) { Icon(painterResource(R.drawable.ic_more), contentDescription = "More") }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Open file…") }, onClick = { menu = false; actions.openFile() })
-                DropdownMenuItem(text = { Text("Save buffer as…") }, onClick = { menu = false; actions.saveFile() })
-                HorizontalDivider()
-                DropdownMenuItem(text = { Text("Larger text") }, onClick = { actions.fontSize(+1) })
-                DropdownMenuItem(text = { Text("Smaller text") }, onClick = { actions.fontSize(-1) })
-                HorizontalDivider()
-                DropdownMenuItem(text = { Text("Clear log") }, onClick = { menu = false; actions.clearLog() })
-            }
-        },
-    )
-}
+/** How much of a phone's screen the log takes: its title only, a third, or all of it. */
+enum class PaneSize { Small, Normal, Full }
 
+/**
+ * The desktop's toolbar, its own buttons: run, stop, load and save on the
+ * left; text size and help on the right (help pink while it is open).
+ */
 @Composable
-private fun PlayingDot() {
-    val pulse by rememberInfiniteTransition(label = "playing").animateFloat(
-        initialValue = 0.35f, targetValue = 1f, label = "pulse",
-        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
-    )
-    Box(Modifier.size(10.dp).alpha(pulse).background(SonicPiColors.Pink, CircleShape))
-}
-
-@Composable
-private fun CodePane(state: AppUiState, actions: AppActions, showPeek: Boolean, onPeek: () -> Unit, modifier: Modifier) {
-    Column(modifier.fillMaxHeight().imePadding()) {
-        PrimaryScrollableTabRow(selectedTabIndex = state.current, edgePadding = 4.dp, containerColor = SonicPiColors.Black, minTabWidth = 48.dp) {
-            state.buffers.forEachIndexed { i, b ->
-                Tab(
-                    selected = i == state.current,
-                    onClick = { actions.selectBuffer(i) },
-                    selectedContentColor = SonicPiColors.Pink,
-                    unselectedContentColor = SonicPiColors.Text,
-                    text = { Text(if (b.text.isBlank() && i != state.current) "$i" else "$i", fontFamily = LocalCodeFont.current) },
-                    modifier = Modifier.alpha(if (b.text.isBlank() && i != state.current) 0.55f else 1f),
-                )
-            }
+private fun Toolbar(actions: AppActions, help: Boolean, onHelp: () -> Unit, sizes: Boolean) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ToolbarButton("run", "Run", actions.run)
+        ToolbarButton("stop", "Stop", actions.stop)
+        ToolbarButton("load", "Load a file into this buffer", actions.openFile)
+        ToolbarButton("save", "Save this buffer as a file", actions.saveFile)
+        Spacer(Modifier.weight(1f))
+        if (sizes) {
+            ToolbarButton("size-down", "Smaller text", { actions.fontSize(-1) })
+            ToolbarButton("size-up", "Larger text", { actions.fontSize(+1) })
         }
+        ToolbarButton(if (help) "help-toggled" else "help", if (help) "Hide help" else "Help", onHelp)
+    }
+}
+
+@Composable
+private fun ToolbarButton(name: String, description: String, onClick: () -> Unit) {
+    val p = SonicPiColors
+    val image = LocalToolbar.current[name]
+    val height = 27.dp
+    val mod = Modifier
+        .height(height)
+        .clickable(onClick = onClick)
+        .semantics { contentDescription = description; role = Role.Button }
+    if (image != null) {
+        Image(image, contentDescription = null, contentScale = ContentScale.FillHeight, modifier = mod.width(height * 167f / 60f))
+    } else {
+        // The button drawn as the image draws it: the label on grey.
+        Box(mod.background(p.Button).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
+            Text(name.substringBefore('-'), fontFamily = LocalCodeFont.current, fontSize = 13.sp, color = p.OnButton)
+        }
+    }
+}
+
+@Composable
+private fun HorizontalRule() = Box(Modifier.fillMaxWidth().height(1.dp).background(SonicPiColors.Button.copy(alpha = 0.3f)))
+
+@Composable
+private fun VerticalRule() = Box(Modifier.width(1.dp).fillMaxHeight().background(SonicPiColors.Button.copy(alpha = 0.3f)))
+
+/** The log and the cues on a phone, under the code: either one, a grip to size them. */
+@Composable
+private fun SidePane(log: List<LogEntry>, size: PaneSize, onSize: (PaneSize) -> Unit, onClear: () -> Unit, modifier: Modifier) {
+    val p = SonicPiColors
+    var cues by rememberSaveable { mutableStateOf(false) }
+    Column(modifier.fillMaxWidth().background(p.Background)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PaneTitle("Log", selected = !cues, onClick = { cues = false; if (size == PaneSize.Small) onSize(PaneSize.Normal) })
+            PaneTitle("Cues", selected = cues, onClick = { cues = true; if (size == PaneSize.Small) onSize(PaneSize.Normal) })
+            Spacer(Modifier.weight(1f))
+            PaneTitle("Clear", selected = false, onClick = onClear)
+            Grip("⌃", "Larger log", enabled = size != PaneSize.Full) { onSize(if (size == PaneSize.Small) PaneSize.Normal else PaneSize.Full) }
+            Grip("⌄", "Smaller log", enabled = size != PaneSize.Small) { onSize(if (size == PaneSize.Full) PaneSize.Normal else PaneSize.Small) }
+        }
+        if (size != PaneSize.Small) {
+            if (cues) CuesView(log, Modifier.weight(1f).fillMaxWidth(), title = false)
+            else LogView(log, Modifier.weight(1f).fillMaxWidth(), title = false)
+        }
+    }
+}
+
+/** The desktop's up and down grips, at a pane's top right. */
+@Composable
+private fun Grip(glyph: String, description: String, enabled: Boolean, onClick: () -> Unit) {
+    val p = SonicPiColors
+    Box(
+        Modifier.size(36.dp).clickable(enabled = enabled, onClick = onClick).semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(glyph, fontSize = 18.sp, color = if (enabled) p.Muted else p.Muted.copy(alpha = 0.3f))
+    }
+}
+
+@Composable
+private fun HelpPanel(state: AppUiState, actions: AppActions, onOpened: () -> Unit, modifier: Modifier) {
+    val narrow = LocalConfiguration.current.screenWidthDp < 840
+    LearnScreen(
+        state.sections, state.functions,
+        // On a phone the code comes back into view with what was opened in it.
+        onOpenCode = { actions.openCode(it); if (narrow) onOpened() },
+        onPlay = actions.play,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun CodePane(state: AppUiState, actions: AppActions, keyboard: Boolean, modifier: Modifier) {
+    val p = SonicPiColors
+    Column(modifier.fillMaxHeight()) {
         if (state.status is EngineStatus.Failed) {
-            Banner("Sonic Pi could not start: ${state.status.message}", error = true)
+            Banner("Sonic Pi could not start: ${state.status.message}")
         }
         val lastError = state.log.lastOrNull { it.kind == LogKind.Error }
         AnimatedVisibility(visible = state.errorLine > 0 && lastError != null) {
-            Banner("Line ${state.errorLine}: ${lastError?.text.orEmpty()}", error = true)
+            Banner("Line ${state.errorLine}: ${lastError?.text.orEmpty()}")
         }
         val value = state.buffers[state.current]
         // Offered as code is typed, as Sonic Pi's editor offers it: not when the caret is only moved.
@@ -307,58 +293,54 @@ private fun CodePane(state: AppUiState, actions: AppActions, showPeek: Boolean, 
                 onInfo = { sheet = it.info() },
             )
             word != null -> WordStrip(word, onOpen = { sheet = word })
-            showPeek -> LogPeek(state.log, onPeek)
         }
         sheet?.let { DocSheet(it, state.functions, onDismiss = { sheet = null }) }
-        KeyBar(onInsert = { typing = true; actions.insert(it) }, onUndo = actions.undo, onRedo = actions.redo, canUndo = state.canUndo, canRedo = state.canRedo)
-    }
-}
-
-@Composable
-private fun Banner(text: String, error: Boolean) {
-    Surface(color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer) {
-        Text(text, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
-    }
-}
-
-/** The log's last lines under the editor, on a phone: a tap opens the whole log. */
-@Composable
-private fun LogPeek(log: List<LogEntry>, onClick: () -> Unit) {
-    val last = log.filter { it.kind != LogKind.Cue }.takeLast(2)
-    Column(
-        Modifier.fillMaxWidth().background(SonicPiColors.Black).clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 6.dp),
-    ) {
-        if (last.isEmpty()) {
-            Text("Log", color = SonicPiColors.Grey, fontSize = 12.sp)
+        val position = remember(value.text, caret) {
+            val lineStart = value.text.lastIndexOf('\n', caret - 1) + 1
+            value.text.lineNumberAt(caret) to (caret - lineStart + 1)
         }
-        for (e in last) {
-            Text(
-                e.text, maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = LocalCodeFont.current, fontSize = 12.sp,
-                color = when (e.kind) { LogKind.Error -> SonicPiColors.Red; LogKind.Output -> SonicPiColors.Blue; else -> SonicPiColors.Dim },
-            )
+        BufferStrip(state.buffers.size, state.current, position, onSelect = actions.selectBuffer)
+        if (keyboard) {
+            KeyBar(onInsert = { typing = true; actions.insert(it) }, onUndo = actions.undo, onRedo = actions.redo,
+                canUndo = state.canUndo, canRedo = state.canRedo)
         }
     }
 }
 
+/** An error, over the code: red on the theme's ground, with a red bar beside it. */
+@Composable
+private fun Banner(text: String) {
+    val p = SonicPiColors
+    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).background(p.Red.copy(alpha = if (p.dark) 0.18f else 0.08f))) {
+        Box(Modifier.width(4.dp).fillMaxHeight().background(p.Red))
+        Text(text, fontFamily = LocalCodeFont.current, fontSize = 13.sp, color = if (p.dark) Color.White else p.Red,
+            maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+    }
+}
+
+/** Starting: Sonic Pi's logo, and how far the sounds are unpacked. */
 @Composable
 private fun BootScreen(status: EngineStatus.Preparing) {
+    val p = SonicPiColors
+    val assets = LocalContext.current.assets
+    val logo = remember(assets, p.dark) {
+        runCatching { assets.open("sonicpi/gui/logo-${if (p.dark) "dark" else "light"}.png").use { BitmapFactory.decodeStream(it)?.asImageBitmap() } }.getOrNull()
+    }
     Column(
-        Modifier.fillMaxSize().background(SonicPiColors.Black).padding(32.dp),
+        Modifier.fillMaxSize().background(p.Background).padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(painterResource(R.drawable.ic_launcher_foreground), contentDescription = null, tint = SonicPiColors.Pink, modifier = Modifier.size(120.dp))
-        Text("Sonic Pi", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = SonicPiColors.Text)
-        Spacer(Modifier.height(24.dp))
-        LinearProgressIndicator(
-            progress = { status.progress },
-            color = SonicPiColors.Pink,
-            trackColor = SonicPiColors.Raised,
-            modifier = Modifier.fillMaxWidth(0.7f).height(6.dp).background(SonicPiColors.Raised, RoundedCornerShape(3.dp)),
-        )
+        if (logo != null) {
+            Image(logo, contentDescription = "Sonic Pi", modifier = Modifier.fillMaxWidth(0.7f))
+        } else {
+            Text("Sonic Pi", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = p.Foreground)
+        }
+        Spacer(Modifier.height(32.dp))
+        Box(Modifier.fillMaxWidth(0.7f).height(4.dp).background(p.Base)) {
+            Box(Modifier.fillMaxWidth(status.progress.coerceIn(0f, 1f)).fillMaxHeight().background(p.Pink))
+        }
         Spacer(Modifier.height(12.dp))
-        Text("${status.message}…", color = SonicPiColors.Dim)
+        Text("${status.message}…", fontFamily = LocalCodeFont.current, fontSize = 13.sp, color = p.Muted)
     }
 }

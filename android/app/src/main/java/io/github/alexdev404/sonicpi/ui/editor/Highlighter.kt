@@ -4,11 +4,11 @@ package io.github.alexdev404.sonicpi.ui.editor
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
-import io.github.alexdev404.sonicpi.ui.theme.SonicPiColors
+import io.github.alexdev404.sonicpi.ui.theme.SonicPiPalette
 
 /** What a stretch of code is, for its colour. */
 enum class TokenKind { Comment, Str, Symbol, OptKey, Number, Keyword, Function, Plain }
@@ -16,9 +16,9 @@ enum class TokenKind { Comment, Str, Symbol, OptKey, Number, Keyword, Function, 
 data class Token(val start: Int, val end: Int, val kind: TokenKind)
 
 /**
- * Sonic Pi's code, tokenised as its editor colours it: comments grey,
- * strings green, symbols and Sonic Pi's functions pink, numbers blue,
- * Ruby's keywords yellow.
+ * Sonic Pi's code, tokenised as its editor colours it: comments in
+ * italics, strings green, symbols and opt keys pink, numbers blue, Ruby's
+ * keywords gold (yellow in the dark theme).
  */
 object Highlighter {
     val keywords = setOf(
@@ -85,30 +85,29 @@ object Highlighter {
         return out
     }
 
-    fun style(kind: TokenKind): SpanStyle = when (kind) {
-        TokenKind.Comment -> SpanStyle(color = SonicPiColors.Grey)
-        TokenKind.Str -> SpanStyle(color = SonicPiColors.Green)
-        TokenKind.Symbol -> SpanStyle(color = SonicPiColors.Pink)
-        TokenKind.OptKey -> SpanStyle(color = SonicPiColors.Text)
-        TokenKind.Number -> SpanStyle(color = SonicPiColors.Blue)
-        TokenKind.Keyword -> SpanStyle(color = SonicPiColors.Yellow)
-        TokenKind.Function -> SpanStyle(color = SonicPiColors.Pink, fontWeight = FontWeight.Bold)
-        TokenKind.Plain -> SpanStyle()
+    /** A token's colour in [p], as the desktop's lexer colours it (sonicpilexer.cpp): functions are plain text there. */
+    fun style(kind: TokenKind, p: SonicPiPalette): SpanStyle = when (kind) {
+        TokenKind.Comment -> SpanStyle(color = p.Comment, fontStyle = FontStyle.Italic)
+        TokenKind.Str -> SpanStyle(color = p.Green)
+        TokenKind.Symbol, TokenKind.OptKey -> SpanStyle(color = p.Pink)
+        TokenKind.Number -> SpanStyle(color = p.Blue)
+        TokenKind.Keyword -> SpanStyle(color = p.Keyword)
+        TokenKind.Function, TokenKind.Plain -> SpanStyle()
     }
 
-    fun highlight(code: String, functions: Set<String>): AnnotatedString = buildAnnotatedString {
+    fun highlight(code: String, functions: Set<String>, p: SonicPiPalette): AnnotatedString = buildAnnotatedString {
         append(code)
-        for (t in tokens(code, functions)) addStyle(style(t.kind), t.start, t.end)
+        for (t in tokens(code, functions)) addStyle(style(t.kind, p), t.start, t.end)
     }
 }
 
 /** The editor's colouring, as a transformation that changes no offsets. */
-class HighlightTransformation(private val functions: Set<String>) : VisualTransformation {
+class HighlightTransformation(private val functions: Set<String>, private val palette: SonicPiPalette) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText =
-        TransformedText(Highlighter.highlight(text.text, functions), OffsetMapping.Identity)
+        TransformedText(Highlighter.highlight(text.text, functions, palette), OffsetMapping.Identity)
 
-    override fun equals(other: Any?) = other is HighlightTransformation && other.functions == functions
-    override fun hashCode() = functions.hashCode()
+    override fun equals(other: Any?) = other is HighlightTransformation && other.functions == functions && other.palette == palette
+    override fun hashCode() = functions.hashCode() * 31 + palette.hashCode()
 }
 
 /** The indentation a new line takes after the one the cursor was on: the same, and a step more after `do`. */

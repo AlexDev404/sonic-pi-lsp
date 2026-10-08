@@ -30,9 +30,9 @@ class Library(private val assets: AssetManager) {
     val sections: List<LibrarySection> by lazy {
         listOf(
             LibrarySection("Examples", examples()),
-            LibrarySection("Functions", functions()),
+            LibrarySection("Lang", functions()),
             LibrarySection("Synths", instruments("synths")),
-            LibrarySection("FX", instruments("fx")),
+            LibrarySection("Fx", instruments("fx")),
             LibrarySection("Samples", samples()),
         )
     }

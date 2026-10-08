@@ -86,8 +86,8 @@ kotlin {
 // Under assets/sonicpi/: the synthdefs, samples, random tables and piano
 // table the engine reads (extracted to the app's private storage on first
 // launch, since the engine opens files by path), the example programs, the
-// language reference for the Learn screen, the editor's completion data, and the Hack font Sonic Pi's
-// editor uses. manifest.txt lists every file with its size, and its hash is
+// language reference for the Learn screen, the editor's completion data, the Hack font Sonic Pi's
+// editor uses, and the desktop's toolbar buttons and logo. manifest.txt lists the engine's files with their sizes, and its hash is
 // the version the app compares to decide whether to extract again.
 abstract class PrepareSonicPiAssets : DefaultTask() {
     @get:Internal abstract val sonicPiRoot: Property<File>
@@ -116,10 +116,18 @@ abstract class PrepareSonicPiAssets : DefaultTask() {
         copyAll("etc/examples", "examples") { it.extension == "rb" }
         for (ref in listOf("lang", "synths", "fx", "samples")) copyOne("app/web/web/data/reference/$ref.json", "reference/$ref.json")
         copyOne("app/web/web/data/completion.json", "completion.json")
-        copyOne("app/gui/fonts/Hack-Regular.ttf", "fonts/Hack-Regular.ttf")
-        copyOne("app/gui/fonts/Hack-Bold.ttf", "fonts/Hack-Bold.ttf")
+        copyAll("app/gui/fonts", "fonts") { it.extension == "ttf" }
+        // The desktop's own toolbar buttons and logo, in its light and dark themes.
+        val buttons = listOf("run", "stop", "load", "save", "size-down", "size-up", "help", "help-toggled")
+        copyAll("app/gui/images/toolbar/default", "gui/toolbar") { f ->
+            f.extension == "png" && (f.name.startsWith("light-") || f.name.startsWith("dark-")) && f.nameWithoutExtension.substringAfter('-') in buttons
+        }
+        copyOne("app/gui/images/logo-transparent.png", "gui/logo-light.png")
+        copyOne("app/gui/images/logo-transparent-dark.png", "gui/logo-dark.png")
 
-        val lines = out.walkTopDown().filter { it.isFile }.map { "${it.relativeTo(out).invariantSeparatorsPath}\t${it.length()}" }.sorted().toList()
+        // The manifest lists what the engine opens by path (and so what is extracted); the rest is read from the APK.
+        val engine = listOf("synthdefs/", "samples/", "buffers/", "piano_wavetable.dat")
+        val lines = out.walkTopDown().filter { it.isFile && engine.any { p -> it.relativeTo(out).invariantSeparatorsPath.startsWith(p) } }.map { "${it.relativeTo(out).invariantSeparatorsPath}\t${it.length()}" }.sorted().toList()
         val digest = MessageDigest.getInstance("SHA-256").digest(lines.joinToString("\n").toByteArray())
         out.resolve("manifest.txt").writeText(
             "# ${digest.joinToString("") { "%02x".format(it) }}\n" + lines.joinToString("\n") + "\n")
@@ -131,7 +139,9 @@ val prepareSonicPiAssets = tasks.register<PrepareSonicPiAssets>("prepareSonicPiA
     sources.from(
         sonicPi.resolve("etc/synthdefs/compiled"), sonicPi.resolve("etc/samples"), sonicPi.resolve("etc/buffers"),
         sonicPi.resolve("etc/examples"), sonicPi.resolve("app/web/web/data/reference"), sonicPi.resolve("app/web/web/data/completion.json"),
-        sonicPi.resolve("app/external/piano/piano_wavetable.dat"), sonicPi.resolve("app/gui/fonts"))
+        sonicPi.resolve("app/external/piano/piano_wavetable.dat"), sonicPi.resolve("app/gui/fonts"),
+        sonicPi.resolve("app/gui/images/toolbar/default"), sonicPi.resolve("app/gui/images/logo-transparent.png"),
+        sonicPi.resolve("app/gui/images/logo-transparent-dark.png"))
     outputDir.set(layout.buildDirectory.dir("generated/sonicpi-assets"))
 }
 

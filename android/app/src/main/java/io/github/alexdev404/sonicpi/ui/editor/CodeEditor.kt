@@ -2,6 +2,11 @@
 package io.github.alexdev404.sonicpi.ui.editor
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,8 +24,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -53,9 +56,10 @@ import io.github.alexdev404.sonicpi.ui.theme.LocalCodeFont
 import io.github.alexdev404.sonicpi.ui.theme.SonicPiColors
 
 /**
- * The code editor: Sonic Pi's colours, its font, line numbers beside each
- * line (wrapped lines keep theirs), the line an error came from marked, and
- * a new line indented as the one before it.
+ * The code editor, as Sonic Pi's: its colours, its font, line numbers in
+ * italics in the margin (wrapped lines keep theirs), the caret's line
+ * marked, the line an error came from marked, and a new line indented as
+ * the one before it.
  */
 @Composable
 fun CodeEditor(
@@ -66,17 +70,27 @@ fun CodeEditor(
     fontSize: TextUnit = 14.sp,
     errorLine: Int = 0,
 ) {
+    val p = SonicPiColors
     val font = LocalCodeFont.current
-    val style = TextStyle(fontFamily = font, fontSize = fontSize, lineHeight = fontSize * 1.45f, color = SonicPiColors.Text)
+    val style = TextStyle(fontFamily = font, fontSize = fontSize, lineHeight = fontSize * 1.45f, color = p.Foreground)
     val measurer = rememberTextMeasurer()
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
-    val transformation = remember(functions) { HighlightTransformation(functions) }
+    val transformation = remember(functions, p) { HighlightTransformation(functions, p) }
     val density = LocalDensity.current
     val gutterWidth = with(density) { (fontSize.toPx() * 2.6f).toDp() } + 12.dp
     val scroll = rememberScrollState()
+    val caretLine = value.text.lineNumberAt(value.selection.start)
 
-    Box(modifier.background(SonicPiColors.Editor).verticalScroll(scroll)) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+    Box(modifier.background(p.Background).verticalScroll(scroll)) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 8.dp).drawBehind {
+                // The caret's line, the width of the editor (CaretLineBackground).
+                val l = layout ?: return@drawBehind
+                if (p.CaretLine == p.Background || !value.selection.collapsed) return@drawBehind
+                val row = l.getLineForOffset(value.selection.start.coerceAtMost(value.text.length))
+                drawRect(p.CaretLine, Offset(0f, l.getLineTop(row)), Size(size.width, l.getLineBottom(row) - l.getLineTop(row)))
+            },
+        ) {
             // Line numbers, drawn where each logical line starts in the layout.
             Box(
                 Modifier
@@ -85,16 +99,16 @@ fun CodeEditor(
                     .drawBehind {
                         val l = layout ?: return@drawBehind
                         val text = value.text
-                        val numberStyle = style.copy(color = SonicPiColors.Grey, textAlign = TextAlign.End)
+                        val numberStyle = style.copy(color = p.Margin, textAlign = TextAlign.End, fontStyle = FontStyle.Italic)
                         var line = 1
                         var offset = 0
                         while (true) {
                             val row = l.getLineForOffset(offset.coerceAtMost(text.length))
                             val top = l.getLineTop(row)
                             if (line == errorLine) {
-                                drawRect(SonicPiColors.Red.copy(alpha = 0.35f), Offset(0f, top), Size(size.width, l.getLineBottom(row) - top))
+                                drawRect(p.Red.copy(alpha = 0.35f), Offset(0f, top), Size(size.width, l.getLineBottom(row) - top))
                             }
-                            val measured = measurer.measure(line.toString(), numberStyle)
+                            val measured = measurer.measure(line.toString(), if (line == caretLine) numberStyle.copy(color = p.Foreground) else numberStyle)
                             drawText(measured, topLeft = Offset(size.width - measured.size.width - 8.dp.toPx(), top))
                             val next = text.indexOf('\n', offset)
                             if (next < 0) break
@@ -107,7 +121,7 @@ fun CodeEditor(
                 value = value,
                 onValueChange = { onValueChange(autoIndent(value, it)) },
                 textStyle = style,
-                cursorBrush = SolidColor(SonicPiColors.Pink),
+                cursorBrush = SolidColor(p.Pink),
                 visualTransformation = transformation,
                 onTextLayout = { layout = it },
                 modifier = Modifier
@@ -115,6 +129,53 @@ fun CodeEditor(
                     .padding(start = 6.dp, end = 12.dp)
                     .semantics { contentDescription = "Code editor" },
             )
+        }
+    }
+}
+
+/** The 1-based line [offset] is on. */
+internal fun String.lineNumberAt(offset: Int): Int {
+    var n = 1
+    for (i in 0 until offset.coerceAtMost(length)) if (this[i] == '\n') n++
+    return n
+}
+
+/**
+ * Under the editor, as on the desktop: where the caret is
+ * ("Line: 3,  Position: 5"), and the buffers as a strip of |0| |1| … |9|,
+ * the one being edited in pink.
+ */
+@Composable
+fun BufferStrip(
+    count: Int,
+    current: Int,
+    caret: Pair<Int, Int>,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val p = SonicPiColors
+    val code = LocalCodeFont.current
+    Column(modifier.fillMaxWidth().background(p.Background).padding(horizontal = 8.dp, vertical = 4.dp)) {
+        Text(
+            "Line: ${caret.first},  Position: ${caret.second}",
+            fontFamily = code, fontSize = 12.sp, color = p.Foreground,
+            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+        )
+        Row(Modifier.fillMaxWidth().height(30.dp).background(p.Button)) {
+            for (i in 0 until count) {
+                val selected = i == current
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .background(if (selected) p.Pink else p.Button)
+                        .clickable { onSelect(i) }
+                        .semantics { contentDescription = "Buffer $i" + if (selected) ", selected" else "" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("|$i|", fontFamily = code, fontSize = 15.sp, color = p.OnButton, maxLines = 1)
+                }
+            }
         }
     }
 }
@@ -155,41 +216,49 @@ fun KeyBar(
     modifier: Modifier = Modifier,
 ) {
     val keys = listOf(":", ",", ".", "(", ")", "[", "]", "|", "\"", "#", "=", "_", "do", "end", "{", "}")
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = modifier.fillMaxWidth()) {
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            KeyChip(onClick = onUndo, enabled = canUndo, description = "Undo") {
-                Icon(painterResource(R.drawable.ic_undo), null, Modifier.size(18.dp))
-            }
-            KeyChip(onClick = onRedo, enabled = canRedo, description = "Redo") {
-                Icon(painterResource(R.drawable.ic_redo), null, Modifier.size(18.dp))
-            }
-            KeyChip(onClick = { onInsert("  ") }, description = "Indent") {
-                Icon(painterResource(R.drawable.ic_tab), null, Modifier.size(18.dp))
-            }
-            for (k in keys) {
-                KeyChip(onClick = { onInsert(k) }, description = k) {
-                    Text(k, fontFamily = LocalCodeFont.current, fontSize = 16.sp, color = SonicPiColors.Text)
-                }
+    val p = SonicPiColors
+    Row(
+        modifier
+            .fillMaxWidth()
+            .background(p.Base)
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 6.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        KeyChip(onClick = onUndo, enabled = canUndo, description = "Undo") {
+            Icon(painterResource(R.drawable.ic_undo), null, Modifier.size(18.dp))
+        }
+        KeyChip(onClick = onRedo, enabled = canRedo, description = "Redo") {
+            Icon(painterResource(R.drawable.ic_redo), null, Modifier.size(18.dp))
+        }
+        KeyChip(onClick = { onInsert("  ") }, description = "Indent") {
+            Icon(painterResource(R.drawable.ic_tab), null, Modifier.size(18.dp))
+        }
+        for (k in keys) {
+            KeyChip(onClick = { onInsert(k) }, description = k) {
+                Text(k, fontFamily = LocalCodeFont.current, fontSize = 16.sp)
             }
         }
     }
 }
 
+/** A key as the desktop's toolbar draws a button: flat, grey, white on it. */
 @Composable
 private fun KeyChip(onClick: () -> Unit, description: String, enabled: Boolean = true, content: @Composable () -> Unit) {
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        shape = RoundedCornerShape(8.dp),
-        color = SonicPiColors.Raised,
-        contentColor = if (enabled) SonicPiColors.Text else SonicPiColors.Grey,
-        modifier = Modifier.height(40.dp).clip(RoundedCornerShape(8.dp)).semantics { contentDescription = description },
+    val p = SonicPiColors
+    Box(
+        Modifier
+            .height(38.dp)
+            .defaultMinSize(minWidth = 38.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(p.Button)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(PaddingValues(horizontal = 10.dp))
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.defaultMinSize(minWidth = 40.dp).fillMaxHeight().padding(PaddingValues(horizontal = 12.dp)), contentAlignment = Alignment.Center) {
+        CompositionLocalProvider(LocalContentColor provides if (enabled) p.OnButton else p.OnButton.copy(alpha = 0.35f)) {
             content()
         }
     }

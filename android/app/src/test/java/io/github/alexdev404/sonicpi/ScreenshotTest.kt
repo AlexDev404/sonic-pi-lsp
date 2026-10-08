@@ -62,8 +62,8 @@ class ScreenshotTest {
         )
     }
 
-    private fun shoot(name: String, destination: Destination, state: AppUiState = state()) {
-        compose.setContent { SonicPiTheme { SonicPiApp(state, AppActions(), initial = destination) } }
+    private fun shoot(name: String, destination: Destination, state: AppUiState = state(), dark: Boolean = true) {
+        compose.setContent { SonicPiTheme(dark = dark) { SonicPiApp(state, AppActions(), initial = destination) } }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
     }
 
@@ -74,7 +74,7 @@ class ScreenshotTest {
     @Test fun phoneLog() = shoot("phone-log", Destination.Log)
 
     @Config(qualifiers = "w411dp-h891dp-xxhdpi")
-    @Test fun phoneLearn() = shoot("phone-learn", Destination.Learn)
+    @Test fun phoneHelp() = shoot("phone-help", Destination.Learn)
 
     @Config(qualifiers = "w411dp-h891dp-xxhdpi")
     @Test fun phoneError() {
@@ -94,7 +94,7 @@ class ScreenshotTest {
         val start = "use_synth :prophet\nplay 60, "
         compose.setContent {
             var s by remember { mutableStateOf(state().let { it.copy(buffers = listOf(TextFieldValue(start, TextRange(start.length))) + it.buffers.drop(1)) }) }
-            SonicPiTheme {
+            SonicPiTheme(dark = true) {
                 SonicPiApp(s, AppActions(edit = { v -> s = s.copy(buffers = listOf(v) + s.buffers.drop(1)) }), initial = Destination.Code)
             }
         }
@@ -112,4 +112,17 @@ class ScreenshotTest {
 
     @Config(qualifiers = "w1280dp-h800dp-xhdpi")
     @Test fun tabletCode() = shoot("tablet-code", Destination.Code)
+
+    // The desktop's default theme, Light, which the app takes when the phone is in light mode.
+    @Config(qualifiers = "w411dp-h891dp-xxhdpi")
+    @Test fun phoneCodeLight() = shoot("phone-code-light", Destination.Code, dark = false)
+
+    @Config(qualifiers = "w411dp-h891dp-xxhdpi")
+    @Test fun phoneHelpLight() = shoot("phone-help-light", Destination.Learn, dark = false)
+
+    @Config(qualifiers = "w1280dp-h800dp-xhdpi")
+    @Test fun tabletHelp() = shoot("tablet-help", Destination.Learn)
+
+    @Config(qualifiers = "w1280dp-h800dp-xhdpi")
+    @Test fun tabletHelpLight() = shoot("tablet-help-light", Destination.Learn, dark = false)
 }
