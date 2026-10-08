@@ -183,12 +183,13 @@ private fun ItemList(section: LibrarySection, selected: String?, onOpen: (Librar
                             .padding(horizontal = 10.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // The name is what the row is: it takes the room it needs, and the summary what is left.
                         Text(item.title, fontSize = 15.sp, color = if (chosen) p.OnButton else p.Foreground, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            overflow = TextOverflow.Ellipsis)
                         if (section.title != "Examples" && item.summary.isNotEmpty() && item.summary != item.title) {
                             Spacer(Modifier.width(10.dp))
                             Text(item.summary, fontSize = 13.sp, color = if (chosen) p.OnButton.copy(alpha = 0.8f) else p.Muted,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         }
                     }
                 }

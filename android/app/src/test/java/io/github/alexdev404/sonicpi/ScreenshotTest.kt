@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -119,6 +120,14 @@ class ScreenshotTest {
 
     @Config(qualifiers = "w411dp-h891dp-xxhdpi")
     @Test fun phoneHelpLight() = shoot("phone-help-light", Destination.Learn, dark = false)
+
+    /** A reference list: each row's name whole, its summary cut short after it. */
+    @Config(qualifiers = "w411dp-h891dp-xxhdpi")
+    @Test fun phoneHelpSynths() {
+        compose.setContent { SonicPiTheme(dark = true) { SonicPiApp(state(), AppActions(), initial = Destination.Learn) } }
+        compose.onNodeWithContentDescription("Synths").performClick()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/phone-help-synths.png")
+    }
 
     @Config(qualifiers = "w1280dp-h800dp-xhdpi")
     @Test fun tabletHelp() = shoot("tablet-help", Destination.Learn)
