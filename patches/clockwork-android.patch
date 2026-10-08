@@ -1,0 +1,48 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index aabf32d..20203ec 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -839,7 +839,11 @@ elseif(APPLE)
+         "-framework CoreFoundation" "-framework AVFoundation")
+ elseif(UNIX)
+     find_package(Threads REQUIRED)
+-    target_link_libraries(clockwork PUBLIC Threads::Threads rt ${CMAKE_DL_LIBS})
++    if(ANDROID)   # librt is part of Android's libc
++        target_link_libraries(clockwork PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
++    else()
++        target_link_libraries(clockwork PUBLIC Threads::Threads rt ${CMAKE_DL_LIBS})
++    endif()
+ endif()
+ 
+ if(MSVC)
+@@ -992,8 +996,11 @@ else()
+     set(CLOCKWORK_RUST_TARGET_DIR ${CLOCKWORK_RUST_WORKSPACE}/target/${CLOCKWORK_RUST_PROFILE})
+     set(CLOCKWORK_RUST_CARGO_ENV)
+ endif()
+-set(CLOCKWORK_RUST_LIB
+-    ${CLOCKWORK_RUST_TARGET_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}${CLOCKWORK_RUST_LIB_NAME}${CMAKE_STATIC_LIBRARY_SUFFIX})
++# An embedder that builds the Rust core itself (for another target, say) names its archive.
++if(NOT CLOCKWORK_RUST_LIB)
++    set(CLOCKWORK_RUST_LIB
++        ${CLOCKWORK_RUST_TARGET_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}${CLOCKWORK_RUST_LIB_NAME}${CMAKE_STATIC_LIBRARY_SUFFIX})
++endif()
+ 
+ # cargo tracks incremental freshness itself, so run it every build.
+ if(CLOCKWORK_RUST)
+diff --git a/src/shm_segment.hpp b/src/shm_segment.hpp
+index 5fe2fe3..851e242 100644
+--- a/src/shm_segment.hpp
++++ b/src/shm_segment.hpp
+@@ -50,6 +50,12 @@
+ #  include <sys/mman.h>
+ #  include <sys/stat.h>
+ #  include <unistd.h>
++#  if defined(__ANDROID__)
++// Android's libc has no POSIX shared memory. Its paths share the arena with a
++// client in another process; an app's engine and client share one, so refuse.
++static inline int shm_open(const char*, int, mode_t) { errno = ENOSYS; return -1; }
++static inline int shm_unlink(const char*) { errno = ENOSYS; return -1; }
++#  endif
+ #endif
+ #include <cstdio>
+ #include <random>

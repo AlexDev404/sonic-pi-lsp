@@ -36,23 +36,31 @@ foreach(opt CLOCKWORK_DEVICE CLOCKWORK_MIDI CLOCKWORK_GAMEPAD CLOCKWORK_OSC CLOC
     set(${opt} OFF CACHE BOOL "" FORCE)
 endforeach()
 set(CLOCKWORK_PRODUCT_NAME "Sonic Pi" CACHE STRING "" FORCE)
-add_subdirectory("${SP_ROOT}/app/external/supersonic" supersonic EXCLUDE_FROM_ALL)
 
-# Android has no POSIX shared memory: clockwork's out-of-process paths get
-# answers that refuse (src/android/posix_shm_compat.h); the app never takes them.
-if(ANDROID)
-    add_library(sp_posix_shm_compat STATIC src/android/posix_shm_compat.c)
-    foreach(t clockwork scsynth)
-        set_property(TARGET ${t} APPEND PROPERTY COMPILE_OPTIONS
-            "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/src/android/posix_shm_compat.h")
-    endforeach()
-    set_property(TARGET clockwork APPEND PROPERTY INTERFACE_LINK_LIBRARIES sp_posix_shm_compat)
-endif()
+# The few changes the upstream sources need (patches/*.patch, each applied in
+# the submodule it is named for): Android's libc has no librt or POSIX shared
+# memory, and clockwork links the Rust core built below. Applied once; a
+# patch already in place is left as it is.
+set(SP_PATCHES clockwork-android "app/external/supersonic/clockwork")
+while(SP_PATCHES)
+    list(POP_FRONT SP_PATCHES sp_patch sp_patch_dir)
+    set(sp_patch_file "${CMAKE_CURRENT_SOURCE_DIR}/../patches/${sp_patch}.patch")
+    execute_process(COMMAND git apply --reverse --check "${sp_patch_file}"
+        WORKING_DIRECTORY "${SP_ROOT}/${sp_patch_dir}" RESULT_VARIABLE sp_applied OUTPUT_QUIET ERROR_QUIET)
+    if(NOT sp_applied EQUAL 0)
+        execute_process(COMMAND git apply "${sp_patch_file}"
+            WORKING_DIRECTORY "${SP_ROOT}/${sp_patch_dir}" RESULT_VARIABLE sp_failed)
+        if(sp_failed)
+            message(FATAL_ERROR "patches/${sp_patch}.patch does not apply to ${sp_patch_dir}")
+        endif()
+        message(STATUS "Applied patches/${sp_patch}.patch")
+    endif()
+endwhile()
 
 # clockwork's core is partly Rust (its heap, sinks, ports, timelines). Its own
 # cargo step builds for the machine it runs on, or for wasm; this one builds
 # for the target, Android's triple included, into this build directory, and
-# links that in place of the archive clockwork names.
+# clockwork links that archive (CLOCKWORK_RUST_LIB).
 find_program(SP_CARGO cargo HINTS "$ENV{HOME}/.cargo/bin" REQUIRED)
 set(SP_RUST_ENV "CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR}/rust")
 set(SP_RUST_FLAGS build --release --locked --no-default-features -p clockwork-native)
@@ -83,22 +91,10 @@ add_custom_target(sp_clockwork_rust_build
     BYPRODUCTS "${SP_RUST_LIB}"
     COMMENT "clockwork's Rust core (cargo${SP_RUST_TRIPLE})"
     VERBATIM)
-add_library(sp_clockwork_rust STATIC IMPORTED GLOBAL)   # GLOBAL: clockwork, in its own directory, links it
-set_target_properties(sp_clockwork_rust PROPERTIES IMPORTED_LOCATION "${SP_RUST_LIB}")
-add_dependencies(sp_clockwork_rust sp_clockwork_rust_build)
-# The Rust archive and clockwork call each other: it takes the place of the
-# one clockwork names, so the cycle is stated and the link repeats them.
-target_link_libraries(sp_clockwork_rust INTERFACE clockwork)
-foreach(prop LINK_LIBRARIES INTERFACE_LINK_LIBRARIES)
-    get_target_property(sp_links clockwork ${prop})
-    if(sp_links)
-        list(TRANSFORM sp_links REPLACE "^clockwork_rust_lib$" "sp_clockwork_rust")
-        if(ANDROID)
-            list(REMOVE_ITEM sp_links rt)   # librt is part of Android's libc
-        endif()
-        set_target_properties(clockwork PROPERTIES ${prop} "${sp_links}")
-    endif()
-endforeach()
+set(CLOCKWORK_RUST_LIB "${SP_RUST_LIB}" CACHE FILEPATH "" FORCE)
+add_subdirectory("${SP_ROOT}/app/external/supersonic" supersonic EXCLUDE_FROM_ALL)
+add_dependencies(clockwork sp_clockwork_rust_build)
+
 # ── The language runtime ──────────────────────────────────────────────────
 set(SP_MRUBY_DIR "${SP_BUILD}/mruby/${SP_MRUBY_TARGET}")
 if(NOT EXISTS "${SP_MRUBY_DIR}/lib/libmruby.a")

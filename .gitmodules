@@ -2,3 +2,4 @@
 	path = sonic-pi
 	url = https://github.com/sonic-pi-net/sonic-pi.git
 	branch = dev
+	ignore = dirty
