@@ -2,6 +2,17 @@
 package io.github.alexdev404.sonicpi.ui
 
 import android.graphics.BitmapFactory
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import io.github.alexdev404.sonicpi.R
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -35,7 +46,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -52,6 +62,7 @@ import io.github.alexdev404.sonicpi.engine.EngineStatus
 import io.github.alexdev404.sonicpi.engine.LogEntry
 import io.github.alexdev404.sonicpi.engine.LogKind
 import io.github.alexdev404.sonicpi.ui.editor.BufferStrip
+import io.github.alexdev404.sonicpi.ui.editor.CaretStatus
 import io.github.alexdev404.sonicpi.ui.editor.CodeEditor
 import io.github.alexdev404.sonicpi.ui.editor.KeyBar
 import io.github.alexdev404.sonicpi.ui.editor.completion.CompletionEngine
@@ -67,11 +78,14 @@ import io.github.alexdev404.sonicpi.ui.log.CuesView
 import io.github.alexdev404.sonicpi.ui.log.LogView
 import io.github.alexdev404.sonicpi.ui.log.PaneTitle
 import io.github.alexdev404.sonicpi.ui.theme.LocalCodeFont
-import io.github.alexdev404.sonicpi.ui.theme.LocalToolbar
 import io.github.alexdev404.sonicpi.ui.theme.SonicPiColors
 
-/** What fills the screen first: the code, the log in full (on a phone), or the help. */
-enum class Destination { Code, Log, Learn }
+/** The app's three places, as tabs at the bottom (a rail on a tablet). */
+enum class Destination(val label: String, val icon: Int) {
+    Code("code", R.drawable.ic_code),
+    Log("log", R.drawable.ic_log),
+    Learn("help", R.drawable.ic_help),
+}
 
 /** Everything the screens show. */
 data class AppUiState(
@@ -111,10 +125,10 @@ data class AppActions(
 @Composable
 fun SonicPiApp(state: AppUiState, actions: AppActions, initial: Destination = Destination.Code) {
     val p = SonicPiColors
-    var help by rememberSaveable { mutableStateOf(initial == Destination.Learn) }
-    var pane by rememberSaveable { mutableStateOf(if (initial == Destination.Log) PaneSize.Full else PaneSize.Normal) }
+    var destination by rememberSaveable { mutableStateOf(initial) }
     val width = LocalConfiguration.current.screenWidthDp
-    val desk = width >= 840            // the desktop's layout: the log beside the code, help under both
+    val wide = width >= 600           // the tabs as a rail beside the content
+    val split = width >= 840          // the log beside the code, as the desktop's side column
     val keyboard = WindowInsets.isImeVisible
 
     if (state.status is EngineStatus.Preparing) {
@@ -122,143 +136,188 @@ fun SonicPiApp(state: AppUiState, actions: AppActions, initial: Destination = De
         return
     }
 
-    Column(Modifier.fillMaxSize().background(p.Background).windowInsetsPadding(WindowInsets.safeDrawing)) {
-        Toolbar(actions, help = help, onHelp = { help = !help }, sizes = width >= 600)
-        if (desk) {
-            Row(Modifier.weight(1f).fillMaxWidth()) {
-                CodePane(state, actions, keyboard, Modifier.weight(0.62f))
-                VerticalRule()
-                Column(Modifier.weight(0.38f).fillMaxHeight()) {
-                    LogView(state.log, Modifier.weight(2f).fillMaxWidth())
-                    HorizontalRule()
-                    CuesView(state.log, Modifier.weight(1f).fillMaxWidth())
+    Column(Modifier.fillMaxSize().background(p.Bar).windowInsetsPadding(WindowInsets.safeDrawing)) {
+        TopBar(state, actions)
+        Row(Modifier.weight(1f).fillMaxWidth()) {
+            if (wide) Rail(destination) { destination = it }
+            Box(Modifier.weight(1f).fillMaxHeight().background(p.Background)) {
+                when (destination) {
+                    Destination.Code -> Row(Modifier.fillMaxSize()) {
+                        CodePane(state, actions, peek = !split && !keyboard, onPeek = { destination = Destination.Log },
+                            modifier = Modifier.weight(if (split) 0.62f else 1f))
+                        if (split) {
+                            VerticalRule()
+                            Column(Modifier.weight(0.38f).fillMaxHeight()) {
+                                LogView(state.log, Modifier.weight(2f).fillMaxWidth())
+                                HorizontalRule()
+                                CuesView(state.log, Modifier.weight(1f).fillMaxWidth())
+                            }
+                        }
+                    }
+                    Destination.Log -> LogAndCues(state.log, actions.clearLog, Modifier.fillMaxSize())
+                    Destination.Learn -> LearnScreen(
+                        state.sections, state.functions,
+                        onOpenCode = { actions.openCode(it); destination = Destination.Code },
+                        onPlay = actions.play,
+                    )
                 }
             }
-            if (help) {
-                HorizontalRule()
-                HelpPanel(state, actions, onOpened = { help = false }, modifier = Modifier.weight(0.8f))
-            }
-        } else if (help) {
-            HelpPanel(state, actions, onOpened = { help = false }, modifier = Modifier.weight(1f))
-        } else {
-            val showPane = !keyboard
-            if (pane != PaneSize.Full || !showPane) CodePane(state, actions, keyboard, Modifier.weight(1f))
-            if (showPane) {
-                HorizontalRule()
-                SidePane(
-                    state.log, pane, onSize = { pane = it }, onClear = actions.clearLog,
-                    modifier = when (pane) {
-                        PaneSize.Full -> Modifier.weight(1f)
-                        PaneSize.Normal -> Modifier.fillMaxHeight(0.3f)
-                        PaneSize.Small -> Modifier
-                    },
-                )
-            }
         }
+        if (!wide && !(keyboard && destination == Destination.Code)) BottomTabs(destination) { destination = it }
     }
 }
-
-/** How much of a phone's screen the log takes: its title only, a third, or all of it. */
-enum class PaneSize { Small, Normal, Full }
 
 /**
- * The desktop's toolbar, its own buttons: run, stop, load and save on the
- * left; text size and help on the right (help pink while it is open).
+ * The top bar: Sonic Pi's name, and the web version's toolbar glyphs, bare:
+ * run (pink while a program plays), stop, load and save; a menu for the rest.
  */
 @Composable
-private fun Toolbar(actions: AppActions, help: Boolean, onHelp: () -> Unit, sizes: Boolean) {
+private fun TopBar(state: AppUiState, actions: AppActions) {
+    val p = SonicPiColors
+    val ready = state.status == EngineStatus.Ready
+    var menu by remember { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        Modifier.fillMaxWidth().background(p.Bar).padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ToolbarButton("run", "Run", actions.run)
-        ToolbarButton("stop", "Stop", actions.stop)
-        ToolbarButton("load", "Load a file into this buffer", actions.openFile)
-        ToolbarButton("save", "Save this buffer as a file", actions.saveFile)
+        Text("Sonic Pi", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = p.Foreground)
         Spacer(Modifier.weight(1f))
-        if (sizes) {
-            ToolbarButton("size-down", "Smaller text", { actions.fontSize(-1) })
-            ToolbarButton("size-up", "Larger text", { actions.fontSize(+1) })
-        }
-        ToolbarButton(if (help) "help-toggled" else "help", if (help) "Hide help" else "Help", onHelp)
-    }
-}
-
-@Composable
-private fun ToolbarButton(name: String, description: String, onClick: () -> Unit) {
-    val p = SonicPiColors
-    val image = LocalToolbar.current[name]
-    val height = 27.dp
-    val mod = Modifier
-        .height(height)
-        .clickable(onClick = onClick)
-        .semantics { contentDescription = description; role = Role.Button }
-    if (image != null) {
-        Image(image, contentDescription = null, contentScale = ContentScale.FillHeight, modifier = mod.width(height * 167f / 60f))
-    } else {
-        // The button drawn as the image draws it: the label on grey.
-        Box(mod.background(p.Button).padding(horizontal = 8.dp), contentAlignment = Alignment.Center) {
-            Text(name.substringBefore('-'), fontFamily = LocalCodeFont.current, fontSize = 13.sp, color = p.OnButton)
+        GlyphButton("run", R.drawable.ic_play, "Run", if (state.running) p.Pink else p.Foreground, ready, actions.run)
+        GlyphButton("stop", R.drawable.ic_stop, "Stop", p.Foreground, ready, actions.stop)
+        GlyphButton("load", R.drawable.ic_more, "Open a file", p.Foreground, true, actions.openFile)
+        GlyphButton("save", R.drawable.ic_more, "Save this buffer as a file", p.Foreground, true, actions.saveFile)
+        Box {
+            IconButton(onClick = { menu = true }, modifier = Modifier.semantics { contentDescription = "More" }) {
+                Icon(painterResource(R.drawable.ic_more), contentDescription = null, tint = p.Muted)
+            }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = p.Base) {
+                DropdownMenuItem(text = { Text("Larger text") }, onClick = { actions.fontSize(+1) })
+                DropdownMenuItem(text = { Text("Smaller text") }, onClick = { actions.fontSize(-1) })
+                HorizontalDivider(color = p.Border)
+                DropdownMenuItem(text = { Text("Clear log") }, onClick = { menu = false; actions.clearLog() })
+            }
         }
     }
 }
 
 @Composable
-private fun HorizontalRule() = Box(Modifier.fillMaxWidth().height(1.dp).background(SonicPiColors.Button.copy(alpha = 0.3f)))
-
-@Composable
-private fun VerticalRule() = Box(Modifier.width(1.dp).fillMaxHeight().background(SonicPiColors.Button.copy(alpha = 0.3f)))
-
-/** The log and the cues on a phone, under the code: either one, a grip to size them. */
-@Composable
-private fun SidePane(log: List<LogEntry>, size: PaneSize, onSize: (PaneSize) -> Unit, onClear: () -> Unit, modifier: Modifier) {
-    val p = SonicPiColors
-    var cues by rememberSaveable { mutableStateOf(false) }
-    Column(modifier.fillMaxWidth().background(p.Background)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            PaneTitle("Log", selected = !cues, onClick = { cues = false; if (size == PaneSize.Small) onSize(PaneSize.Normal) })
-            PaneTitle("Cues", selected = cues, onClick = { cues = true; if (size == PaneSize.Small) onSize(PaneSize.Normal) })
-            Spacer(Modifier.weight(1f))
-            PaneTitle("Clear", selected = false, onClick = onClear)
-            Grip("⌃", "Larger log", enabled = size != PaneSize.Full) { onSize(if (size == PaneSize.Small) PaneSize.Normal else PaneSize.Full) }
-            Grip("⌄", "Smaller log", enabled = size != PaneSize.Small) { onSize(if (size == PaneSize.Full) PaneSize.Normal else PaneSize.Small) }
-        }
-        if (size != PaneSize.Small) {
-            if (cues) CuesView(log, Modifier.weight(1f).fillMaxWidth(), title = false)
-            else LogView(log, Modifier.weight(1f).fillMaxWidth(), title = false)
-        }
-    }
-}
-
-/** The desktop's up and down grips, at a pane's top right. */
-@Composable
-private fun Grip(glyph: String, description: String, enabled: Boolean, onClick: () -> Unit) {
-    val p = SonicPiColors
+private fun GlyphButton(name: String, fallback: Int, description: String, tint: Color, enabled: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(36.dp).clickable(enabled = enabled, onClick = onClick).semantics { contentDescription = description },
+        Modifier.size(48.dp).clip(CircleShape).clickable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = description; role = Role.Button },
         contentAlignment = Alignment.Center,
     ) {
-        Text(glyph, fontSize = 18.sp, color = if (enabled) p.Muted else p.Muted.copy(alpha = 0.3f))
+        Glyph(name, if (enabled) tint else tint.copy(alpha = 0.35f), fallback, Modifier.size(24.dp))
+    }
+}
+
+/** A tab's icon: on a pink square when chosen, as Sonic Pi shows a toggled one. */
+@Composable
+private fun TabIcon(d: Destination, selected: Boolean) {
+    val p = SonicPiColors
+    Box(
+        Modifier.size(width = 52.dp, height = 30.dp).clip(RoundedCornerShape(4.dp)).background(if (selected) p.Pink else Color.Transparent),
+        contentAlignment = Alignment.Center,
+    ) {
+        val tint = if (selected) p.OnButton else p.Muted
+        if (d == Destination.Learn) Glyph("help", tint, d.icon, Modifier.size(20.dp))
+        else Icon(painterResource(d.icon), contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
     }
 }
 
 @Composable
-private fun HelpPanel(state: AppUiState, actions: AppActions, onOpened: () -> Unit, modifier: Modifier) {
-    val narrow = LocalConfiguration.current.screenWidthDp < 840
-    LearnScreen(
-        state.sections, state.functions,
-        // On a phone the code comes back into view with what was opened in it.
-        onOpenCode = { actions.openCode(it); if (narrow) onOpened() },
-        onPlay = actions.play,
-        modifier = modifier,
-    )
+private fun BottomTabs(selected: Destination, onSelect: (Destination) -> Unit) {
+    val p = SonicPiColors
+    Column {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(p.Border))
+        Row(Modifier.fillMaxWidth().background(p.Bar).padding(vertical = 6.dp)) {
+            for (d in Destination.entries) {
+                val on = d == selected
+                Column(
+                    Modifier.weight(1f).clickable { onSelect(d) }.padding(vertical = 4.dp)
+                        .semantics { contentDescription = d.label + if (on) ", selected" else ""; role = Role.Tab },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    TabIcon(d, on)
+                    Spacer(Modifier.height(4.dp))
+                    Text(d.label, fontFamily = LocalCodeFont.current, fontSize = 12.sp, color = if (on) p.Pink else p.Muted)
+                }
+            }
+        }
+    }
 }
 
 @Composable
-private fun CodePane(state: AppUiState, actions: AppActions, keyboard: Boolean, modifier: Modifier) {
+private fun Rail(selected: Destination, onSelect: (Destination) -> Unit) {
     val p = SonicPiColors
+    Row {
+        Column(Modifier.fillMaxHeight().width(80.dp).background(p.Bar).padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            for (d in Destination.entries) {
+                val on = d == selected
+                Column(
+                    Modifier.fillMaxWidth().clickable { onSelect(d) }.padding(vertical = 10.dp)
+                        .semantics { contentDescription = d.label + if (on) ", selected" else ""; role = Role.Tab },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    TabIcon(d, on)
+                    Spacer(Modifier.height(4.dp))
+                    Text(d.label, fontFamily = LocalCodeFont.current, fontSize = 12.sp, color = if (on) p.Pink else p.Muted)
+                }
+            }
+        }
+        Box(Modifier.width(1.dp).fillMaxHeight().background(p.Border))
+    }
+}
+
+@Composable
+private fun HorizontalRule() = Box(Modifier.fillMaxWidth().height(1.dp).background(SonicPiColors.Border))
+
+@Composable
+private fun VerticalRule() = Box(Modifier.width(1.dp).fillMaxHeight().background(SonicPiColors.Border))
+
+/** The log tab: the log or the cues, picked by their titles, as the desktop's side column names them. */
+@Composable
+private fun LogAndCues(log: List<LogEntry>, onClear: () -> Unit, modifier: Modifier) {
+    var cues by rememberSaveable { mutableStateOf(false) }
+    Column(modifier.background(SonicPiColors.Background)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            PaneTitle("Log", selected = !cues, onClick = { cues = false })
+            PaneTitle("Cues", selected = cues, onClick = { cues = true })
+            Spacer(Modifier.weight(1f))
+            PaneTitle("Clear", selected = false, onClick = onClear)
+        }
+        if (cues) CuesView(log, Modifier.weight(1f).fillMaxWidth(), title = false)
+        else LogView(log, Modifier.weight(1f).fillMaxWidth(), title = false)
+    }
+}
+
+/** The log's last lines under the code, on a phone; a tap opens the log. */
+@Composable
+private fun LogPeek(log: List<LogEntry>, onClick: () -> Unit) {
+    val p = SonicPiColors
+    val last = log.filter { it.kind != LogKind.Cue }.takeLast(2)
+    Column(
+        Modifier.fillMaxWidth().background(p.Background).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp)
+            .semantics { contentDescription = "The log's last lines. Open the log" },
+    ) {
+        if (last.isEmpty()) PaneTitle("Log", modifier = Modifier.padding(0.dp))
+        for (e in last) {
+            Text(
+                e.text, maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = LocalCodeFont.current, fontSize = 12.sp,
+                color = when {
+                    e.kind == LogKind.Error -> p.Red
+                    e.text.startsWith("sample") -> p.Blue
+                    else -> p.Foreground
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun CodePane(state: AppUiState, actions: AppActions, peek: Boolean, onPeek: () -> Unit, modifier: Modifier) {
     Column(modifier.fillMaxHeight()) {
+        BufferStrip(state.buffers.size, state.current, onSelect = actions.selectBuffer)
         if (state.status is EngineStatus.Failed) {
             Banner("Sonic Pi could not start: ${state.status.message}")
         }
@@ -299,11 +358,10 @@ private fun CodePane(state: AppUiState, actions: AppActions, keyboard: Boolean, 
             val lineStart = value.text.lastIndexOf('\n', caret - 1) + 1
             value.text.lineNumberAt(caret) to (caret - lineStart + 1)
         }
-        BufferStrip(state.buffers.size, state.current, position, onSelect = actions.selectBuffer)
-        if (keyboard) {
-            KeyBar(onInsert = { typing = true; actions.insert(it) }, onUndo = actions.undo, onRedo = actions.redo,
-                canUndo = state.canUndo, canRedo = state.canRedo)
-        }
+        CaretStatus(position.first, position.second)
+        if (peek && suggestions == null && word == null) LogPeek(state.log, onPeek)
+        KeyBar(onInsert = { typing = true; actions.insert(it) }, onUndo = actions.undo, onRedo = actions.redo,
+            canUndo = state.canUndo, canRedo = state.canRedo)
     }
 }
 

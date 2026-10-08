@@ -87,7 +87,7 @@ kotlin {
 // table the engine reads (extracted to the app's private storage on first
 // launch, since the engine opens files by path), the example programs, the
 // language reference for the Learn screen, the editor's completion data, the Hack font Sonic Pi's
-// editor uses, and the desktop's toolbar buttons and logo. manifest.txt lists the engine's files with their sizes, and its hash is
+// editor uses, the web version's toolbar glyphs and the desktop's logo. manifest.txt lists the engine's files with their sizes, and its hash is
 // the version the app compares to decide whether to extract again.
 abstract class PrepareSonicPiAssets : DefaultTask() {
     @get:Internal abstract val sonicPiRoot: Property<File>
@@ -117,11 +117,8 @@ abstract class PrepareSonicPiAssets : DefaultTask() {
         for (ref in listOf("lang", "synths", "fx", "samples")) copyOne("app/web/web/data/reference/$ref.json", "reference/$ref.json")
         copyOne("app/web/web/data/completion.json", "completion.json")
         copyAll("app/gui/fonts", "fonts") { it.extension == "ttf" }
-        // The desktop's own toolbar buttons and logo, in its light and dark themes.
-        val buttons = listOf("run", "stop", "load", "save", "size-down", "size-up", "help", "help-toggled")
-        copyAll("app/gui/images/toolbar/default", "gui/toolbar") { f ->
-            f.extension == "png" && (f.name.startsWith("light-") || f.name.startsWith("dark-")) && f.nameWithoutExtension.substringAfter('-') in buttons
-        }
+        // The web version's toolbar glyphs (masks, tinted by the theme), and the desktop's logo for the splash.
+        for (g in listOf("run", "stop", "load", "save", "help")) copyOne("app/web/web/data/toolbar/$g.png", "gui/glyphs/$g.png")
         copyOne("app/gui/images/logo-transparent.png", "gui/logo-light.png")
         copyOne("app/gui/images/logo-transparent-dark.png", "gui/logo-dark.png")
 
@@ -140,7 +137,7 @@ val prepareSonicPiAssets = tasks.register<PrepareSonicPiAssets>("prepareSonicPiA
         sonicPi.resolve("etc/synthdefs/compiled"), sonicPi.resolve("etc/samples"), sonicPi.resolve("etc/buffers"),
         sonicPi.resolve("etc/examples"), sonicPi.resolve("app/web/web/data/reference"), sonicPi.resolve("app/web/web/data/completion.json"),
         sonicPi.resolve("app/external/piano/piano_wavetable.dat"), sonicPi.resolve("app/gui/fonts"),
-        sonicPi.resolve("app/gui/images/toolbar/default"), sonicPi.resolve("app/gui/images/logo-transparent.png"),
+        sonicPi.resolve("app/web/web/data/toolbar"), sonicPi.resolve("app/gui/images/logo-transparent.png"),
         sonicPi.resolve("app/gui/images/logo-transparent-dark.png"))
     outputDir.set(layout.buildDirectory.dir("generated/sonicpi-assets"))
 }

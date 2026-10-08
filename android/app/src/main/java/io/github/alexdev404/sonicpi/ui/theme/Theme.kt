@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 package io.github.alexdev404.sonicpi.ui.theme
 
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -13,8 +12,6 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -33,6 +30,8 @@ data class SonicPiPalette(
     val Background: Color,
     /** Menus and raised surfaces ("Base"). */
     val Base: Color,
+    /** The app's top and bottom bars, a step from the code's ground. */
+    val Bar: Color,
     /** Text ("Foreground"). */
     val Foreground: Color,
     /** Toolbar buttons and unselected tabs ("Button", "Tab"), with [OnButton] text. */
@@ -42,7 +41,11 @@ data class SonicPiPalette(
     val Border: Color,
     /** What the help and the log say quietly: panel titles, summaries. */
     val Muted: Color,
-    /** deeppink: the selected tab, the caret, symbols and Sonic Pi's functions, links. */
+    /**
+     * Sonic Pi's pink (deeppink on the desktop, a touch softer here, where a
+     * phone's screen is close and bright): the selected tab, the caret,
+     * symbols, links.
+     */
     val Pink: Color,
     /** Numbers ("NumberForeground"), and the log's first stream. */
     val Blue: Color,
@@ -61,25 +64,30 @@ data class SonicPiPalette(
     val Status: Color,
 )
 
-private val Deeppink = Color(0xFFFF1493)
+private val Deeppink = Color(0xFFF0479A)
 private val Darkorange = Color(0xFFFF8C00)
 
 val LightPalette = SonicPiPalette(
     dark = false,
-    Background = Color.White, Base = Color(0xFFEDEDED), Foreground = Color(0xFF5E5E5E),
+    Background = Color.White, Base = Color(0xFFEDEDED), Bar = Color(0xFFF4F4F4), Foreground = Color(0xFF5E5E5E),
     Button = Color(0xFF5E5E5E), OnButton = Color.White, Border = Color(0xFFEDEDED), Muted = Color(0xFF8E8E8E),
     Pink = Deeppink, Blue = Color(0xFF1E90FF), Keyword = Color(0xFFFF8C00), Green = Color(0xFF61CE3C),
     Orange = Darkorange, Red = Color(0xFFFF0000), Comment = Color(0xFF5E5E5E), Margin = Color(0xFFD3D3D3),
     CaretLine = Color.White, Status = Color(0xFF5E5E5E),
 )
 
+/**
+ * The desktop's dark theme on the desktop's editor grey (#1e1e1e, its
+ * "Base") rather than its black, which is too harsh on a phone; the
+ * comments and margin a step lighter to keep their contrast on it.
+ */
 val DarkPalette = SonicPiPalette(
     dark = true,
-    Background = Color.Black, Base = Color(0xFF1E1E1E), Foreground = Color(0xFFEDEDED),
-    Button = Color(0xFF5E5E5E), OnButton = Color.White, Border = Color(0xFF1E1E1E), Muted = Color(0xFF8E8E8E),
+    Background = Color(0xFF1E1E1E), Base = Color(0xFF2A2A2A), Bar = Color(0xFF161616), Foreground = Color(0xFFEDEDED),
+    Button = Color(0xFF5E5E5E), OnButton = Color.White, Border = Color(0xFF333333), Muted = Color(0xFF9A9A9A),
     Pink = Deeppink, Blue = Color(0xFF4C83FF), Keyword = Color(0xFFFBDE2D), Green = Color(0xFF61CE3C),
-    Orange = Darkorange, Red = Color(0xFFFF0000), Comment = Color(0xFF5E5E5E), Margin = Color(0xFF5E5E5E),
-    CaretLine = Color(0xFF0D0D0D), Status = Color(0xFF4C83FF),
+    Orange = Darkorange, Red = Color(0xFFFF3B3B), Comment = Color(0xFF7A7A7A), Margin = Color(0xFF6A6A6A),
+    CaretLine = Color(0xFF262626), Status = Color(0xFF4C83FF),
 )
 
 val LocalPalette = staticCompositionLocalOf { DarkPalette }
@@ -90,14 +98,6 @@ val SonicPiColors: SonicPiPalette
 
 /** The editor's font: Hack, as Sonic Pi's editor uses, from the assets; monospace if it is missing. */
 val LocalCodeFont = staticCompositionLocalOf<FontFamily> { FontFamily.Monospace }
-
-/** The desktop's toolbar buttons (app/gui/images/toolbar/default), for the theme in effect; empty if missing. */
-class ToolbarImages(private val load: (String) -> ImageBitmap?) {
-    private val cache = HashMap<String, ImageBitmap?>()
-    operator fun get(name: String): ImageBitmap? = cache.getOrPut(name) { load(name) }
-}
-
-val LocalToolbar = staticCompositionLocalOf { ToolbarImages { null } }
 
 @Composable
 fun SonicPiTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
@@ -112,12 +112,6 @@ fun SonicPiTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () 
         }.getOrDefault(FontFamily.Monospace)
     }
     val palette = if (dark) DarkPalette else LightPalette
-    val toolbar = remember(assets, dark) {
-        val prefix = if (dark) "dark" else "light"
-        ToolbarImages { name ->
-            runCatching { assets.open("sonicpi/gui/toolbar/$prefix-$name.png").use { BitmapFactory.decodeStream(it)?.asImageBitmap() } }.getOrNull()
-        }
-    }
     val scheme = if (dark) {
         darkColorScheme(
             primary = Deeppink, onPrimary = Color.White, secondary = Deeppink, onSecondary = Color.White,
@@ -135,7 +129,7 @@ fun SonicPiTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () 
             outline = palette.Button, outlineVariant = palette.Border, error = palette.Red,
         )
     }
-    CompositionLocalProvider(LocalCodeFont provides code, LocalPalette provides palette, LocalToolbar provides toolbar) {
+    CompositionLocalProvider(LocalCodeFont provides code, LocalPalette provides palette) {
         MaterialTheme(colorScheme = scheme, content = content)
     }
 }

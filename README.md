@@ -49,16 +49,18 @@ build. `.gitmodules` sets `ignore = dirty` so this doesn't clutter
 
 ## The app
 
-The app looks like Sonic Pi's desktop app. It uses the desktop's light and
-dark themes, with their exact colours from `sonicpitheme.cpp`, and follows
-the phone's light or dark mode. Its toolbar buttons and logo are the
-desktop's own images, taken from the submodule.
+The app is made for a phone, in Sonic Pi's design language:
+- **Layout:** a top bar, with tabs at the bottom (a rail on a tablet).
+- **Colours:** the desktop's light and dark themes (`sonicpitheme.cpp`). The dark theme sits on the desktop's editor grey, with a slightly softer pink.
+- **Light or dark:** the app follows the phone's mode.
+- **Icons:** the toolbar glyphs (▶ ■ + ⌐ Δ) are the web version's own, tinted as it tints them.
 
 - **Code.**
-  - The toolbar has run, stop, load and save, plus text size on wider screens, and help.
-  - There are ten buffers, as on the desktop, in a `|0| |1| … |9|` strip under the editor. They are saved as you type.
+  - The top bar has run, which turns pink while a program plays, plus stop, load and save. A menu holds text size and clear log.
+  - There are ten buffers, as on the desktop, as `|0| |1| … |9|` tabs above the editor. They are saved as you type.
   - The editor has Sonic Pi's syntax colours and its Hack font. Line numbers are in italics, the caret's line is marked, and there is a `Line: N, Position: M` readout. New lines are auto-indented, and the line of an error is marked after a failed run.
-  - While the keyboard is open, a bar above it has the symbols code needs, plus undo, redo and indent.
+  - The log's last lines show under the code.
+  - A bar above the keyboard has the symbols code needs, plus undo, redo and indent.
 - **IntelliSense.**
   - What the editor offers as you type is what Sonic Pi's desktop editor offers. It uses a port of upstream's completion engine (`app/web/app/src/completion`, itself ported from the desktop's `completion_context.cpp`) on the same `completion.json`. Examples:
     - samples after `sample`
@@ -72,11 +74,12 @@ desktop's own images, taken from the submodule.
 - **Log and cues.**
   - The log uses the desktop's format: a `{run: 1, time: 0.5, thread: :drums}` header for each moment, with what played beneath it on `├─`/`└─` branches.
   - The cues pane lists every cued path.
-  - On a phone, both sit under the code and can be resized with grips. On a tablet they sit beside the code, as the desktop's side column does.
+  - On a tablet both sit beside the code, as the desktop's side column does.
 - **Help.**
-  - The desktop's help panel, opened with the toolbar's help button. Pill tabs switch between Examples, Lang, Synths, Fx and Samples.
+  - The desktop's help panel, with pill tabs for Examples, Lang, Synths, Fx and Samples.
   - Each tab has a filter and a list, and each page has a pink title and rule.
   - Code opens into the current buffer, and tapping a sample plays it.
+  - The splash screen is the desktop's logo.
 
 ### Android 16 and storage
 

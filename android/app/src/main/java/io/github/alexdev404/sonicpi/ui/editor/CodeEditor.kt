@@ -3,7 +3,6 @@ package io.github.alexdev404.sonicpi.ui.editor
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.text.font.FontStyle
@@ -141,43 +140,42 @@ internal fun String.lineNumberAt(offset: Int): Int {
 }
 
 /**
- * Under the editor, as on the desktop: where the caret is
- * ("Line: 3,  Position: 5"), and the buffers as a strip of |0| |1| … |9|,
- * the one being edited in pink.
+ * The buffers, as the desktop's strip of |0| |1| … |9|, the one being
+ * edited in pink; above the code, where a phone's thumb finds it.
  */
 @Composable
-fun BufferStrip(
-    count: Int,
-    current: Int,
-    caret: Pair<Int, Int>,
-    onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
+fun BufferStrip(count: Int, current: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
     val p = SonicPiColors
     val code = LocalCodeFont.current
-    Column(modifier.fillMaxWidth().background(p.Background).padding(horizontal = 8.dp, vertical = 4.dp)) {
-        Text(
-            "Line: ${caret.first},  Position: ${caret.second}",
-            fontFamily = code, fontSize = 12.sp, color = p.Foreground,
-            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
-        )
-        Row(Modifier.fillMaxWidth().height(30.dp).background(p.Button)) {
-            for (i in 0 until count) {
-                val selected = i == current
-                Box(
-                    Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .background(if (selected) p.Pink else p.Button)
-                        .clickable { onSelect(i) }
-                        .semantics { contentDescription = "Buffer $i" + if (selected) ", selected" else "" },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("|$i|", fontFamily = code, fontSize = 15.sp, color = p.OnButton, maxLines = 1)
-                }
+    Row(modifier.fillMaxWidth().height(40.dp).background(p.Bar).padding(horizontal = 4.dp)) {
+        for (i in 0 until count) {
+            val selected = i == current
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(horizontal = 2.dp, vertical = 5.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (selected) p.Pink else p.Base)
+                    .clickable { onSelect(i) }
+                    .semantics { contentDescription = "Buffer $i" + if (selected) ", selected" else "" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("|$i|", fontFamily = code, fontSize = 14.sp, color = if (selected) p.OnButton else p.Foreground, maxLines = 1)
             }
         }
     }
+}
+
+/** Where the caret is, as the desktop says it under the code: "Line: 3,  Position: 5". */
+@Composable
+fun CaretStatus(line: Int, position: Int, modifier: Modifier = Modifier) {
+    val p = SonicPiColors
+    Text(
+        "Line: $line,  Position: $position",
+        fontFamily = LocalCodeFont.current, fontSize = 11.sp, color = p.Muted,
+        modifier = modifier.fillMaxWidth().background(p.Background).padding(horizontal = 12.dp, vertical = 3.dp),
+    )
 }
 
 /** A newline typed on its own takes the indentation of the line it ended (and a step more after `do`). */
@@ -220,10 +218,10 @@ fun KeyBar(
     Row(
         modifier
             .fillMaxWidth()
-            .background(p.Base)
+            .background(p.Bar)
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 6.dp, vertical = 5.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(horizontal = 6.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         KeyChip(onClick = onUndo, enabled = canUndo, description = "Undo") {
@@ -243,22 +241,22 @@ fun KeyBar(
     }
 }
 
-/** A key as the desktop's toolbar draws a button: flat, grey, white on it. */
+/** A key: a rounded chip, one tap each. */
 @Composable
 private fun KeyChip(onClick: () -> Unit, description: String, enabled: Boolean = true, content: @Composable () -> Unit) {
     val p = SonicPiColors
     Box(
         Modifier
-            .height(38.dp)
-            .defaultMinSize(minWidth = 38.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(p.Button)
+            .height(40.dp)
+            .defaultMinSize(minWidth = 40.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(p.Base)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(PaddingValues(horizontal = 10.dp))
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        CompositionLocalProvider(LocalContentColor provides if (enabled) p.OnButton else p.OnButton.copy(alpha = 0.35f)) {
+        CompositionLocalProvider(LocalContentColor provides if (enabled) p.Foreground else p.Muted.copy(alpha = 0.5f)) {
             content()
         }
     }
