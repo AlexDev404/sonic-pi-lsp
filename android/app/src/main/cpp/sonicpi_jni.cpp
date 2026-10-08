@@ -97,6 +97,17 @@ JNI(jobjectArray, nativePollEvents)(JNIEnv* env, jobject) {
         std::lock_guard<std::mutex> lock(gEventsMutex);
         events.swap(gEvents);
     }
+    // An underrun since the last poll: said in the log, with the buffering it led to.
+    static int32_t xrunsSaid = 0;
+    if (gAudio && gAudio->xruns() > xrunsSaid) {
+        const int32_t now = gAudio->xruns();
+        sonicpi::Event e;
+        e.kind = sonicpi::Event::Engine;
+        e.text = "Audio dropout (" + std::to_string(now - xrunsSaid) + "): buffering is now " +
+                 std::to_string(int(gAudio->bufferMs() + 0.5)) + " ms";
+        events.push_back(std::move(e));
+        xrunsSaid = now;
+    }
     jclass stringClass = env->FindClass("java/lang/String");
     jobjectArray out = env->NewObjectArray(jsize(events.size()), stringClass, nullptr);
     for (size_t i = 0; i < events.size(); i++) {
