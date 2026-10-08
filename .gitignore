@@ -1,0 +1,10 @@
+build/
+.gradle/
+local.properties
+*.iml
+.idea/
+android/app/build/
+android/build/
+android/app/.cxx/
+android/app/src/main/assets/sonicpi/
+.kotlin/
