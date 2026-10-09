@@ -73,6 +73,7 @@ import io.github.alexdev404.sonicpi.ui.editor.completion.WordStrip
 import io.github.alexdev404.sonicpi.ui.editor.completion.accept
 import io.github.alexdev404.sonicpi.ui.editor.completion.info
 import io.github.alexdev404.sonicpi.ui.editor.lineNumberAt
+import io.github.alexdev404.sonicpi.ui.editor.moved
 import io.github.alexdev404.sonicpi.ui.learn.LearnScreen
 import io.github.alexdev404.sonicpi.ui.log.CuesView
 import io.github.alexdev404.sonicpi.ui.log.LogView
@@ -372,7 +373,7 @@ private fun CodePane(state: AppUiState, actions: AppActions, peek: Boolean, onPe
         }
         CaretStatus(position.first, position.second)
         if (peek && suggestions == null && word == null) LogPeek(state.log, onPeek)
-        KeyBar(onInsert = { typing = true; actions.insert(it) }, onUndo = actions.undo, onRedo = actions.redo,
+        KeyBar(onInsert = { typing = true; actions.insert(it) }, onMove = { actions.edit(value.moved(it)) }, onUndo = actions.undo, onRedo = actions.redo,
             canUndo = state.canUndo, canRedo = state.canRedo)
     }
 }

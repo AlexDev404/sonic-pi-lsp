@@ -200,6 +200,30 @@ fun TextFieldValue.insert(text: String): TextFieldValue {
     return copy(text = newText, selection = TextRange(start + text.length))
 }
 
+enum class CaretMove { Home, End, Up, Down, Left, Right }
+
+/** The caret moved as the key says; Up and Down keep the column where the line is long enough. */
+fun TextFieldValue.moved(move: CaretMove): TextFieldValue {
+    val caret = selection.end.coerceIn(0, text.length)
+    val lineStart = text.lastIndexOf('\n', caret - 1) + 1
+    val lineEnd = text.indexOf('\n', caret).let { if (it < 0) text.length else it }
+    val to = when (move) {
+        CaretMove.Home -> lineStart
+        CaretMove.End -> lineEnd
+        CaretMove.Left -> if (selection.collapsed) maxOf(caret - 1, 0) else selection.min
+        CaretMove.Right -> if (selection.collapsed) minOf(caret + 1, text.length) else selection.max
+        CaretMove.Up -> if (lineStart == 0) 0 else {
+            val prevStart = text.lastIndexOf('\n', lineStart - 2) + 1
+            minOf(prevStart + (caret - lineStart), lineStart - 1)
+        }
+        CaretMove.Down -> if (lineEnd == text.length) text.length else {
+            val nextEnd = text.indexOf('\n', lineEnd + 1).let { if (it < 0) text.length else it }
+            minOf(lineEnd + 1 + (caret - lineStart), nextEnd)
+        }
+    }
+    return copy(selection = TextRange(to))
+}
+
 /**
  * The keys a phone's keyboard hides behind a second page, and the words code
  * is made of: one tap each, above the keyboard.
@@ -207,13 +231,14 @@ fun TextFieldValue.insert(text: String): TextFieldValue {
 @Composable
 fun KeyBar(
     onInsert: (String) -> Unit,
+    onMove: (CaretMove) -> Unit,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     canUndo: Boolean,
     canRedo: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val keys = listOf(":", ",", ".", "(", ")", "[", "]", "|", "\"", "#", "=", "_", "do", "end", "{", "}")
+    val keys = listOf("[", "]", "|", "\"", "#", "=", "_", "do", "end", "{", "}")
     val p = SonicPiColors
     Row(
         modifier
@@ -224,14 +249,32 @@ fun KeyBar(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        KeyChip(onClick = { onInsert("  ") }, description = "Tab") {
+            Icon(painterResource(R.drawable.ic_tab), null, Modifier.size(18.dp))
+        }
+        KeyChip(onClick = { onMove(CaretMove.Home) }, description = "Home") {
+            Text("Home", fontSize = 14.sp)
+        }
+        KeyChip(onClick = { onMove(CaretMove.End) }, description = "End") {
+            Text("End", fontSize = 14.sp)
+        }
+        KeyChip(onClick = { onMove(CaretMove.Up) }, description = "Up") {
+            Icon(painterResource(R.drawable.ic_up), null, Modifier.size(24.dp))
+        }
+        KeyChip(onClick = { onMove(CaretMove.Down) }, description = "Down") {
+            Icon(painterResource(R.drawable.ic_down), null, Modifier.size(24.dp))
+        }
+        KeyChip(onClick = { onMove(CaretMove.Left) }, description = "Left") {
+            Icon(painterResource(R.drawable.ic_left), null, Modifier.size(24.dp))
+        }
+        KeyChip(onClick = { onMove(CaretMove.Right) }, description = "Right") {
+            Icon(painterResource(R.drawable.ic_right), null, Modifier.size(24.dp))
+        }
         KeyChip(onClick = onUndo, enabled = canUndo, description = "Undo") {
             Icon(painterResource(R.drawable.ic_undo), null, Modifier.size(18.dp))
         }
         KeyChip(onClick = onRedo, enabled = canRedo, description = "Redo") {
             Icon(painterResource(R.drawable.ic_redo), null, Modifier.size(18.dp))
-        }
-        KeyChip(onClick = { onInsert("  ") }, description = "Indent") {
-            Icon(painterResource(R.drawable.ic_tab), null, Modifier.size(18.dp))
         }
         for (k in keys) {
             KeyChip(onClick = { onInsert(k) }, description = k) {

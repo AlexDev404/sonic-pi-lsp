@@ -3,11 +3,13 @@ package io.github.alexdev404.sonicpi
 
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import io.github.alexdev404.sonicpi.ui.editor.CaretMove
 import io.github.alexdev404.sonicpi.ui.editor.Highlighter
 import io.github.alexdev404.sonicpi.ui.editor.TokenKind
 import io.github.alexdev404.sonicpi.ui.editor.autoIndent
 import io.github.alexdev404.sonicpi.ui.editor.indentAfter
 import io.github.alexdev404.sonicpi.ui.editor.insert
+import io.github.alexdev404.sonicpi.ui.editor.moved
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -49,5 +51,16 @@ class EditorTest {
 
     @Test fun insertReplacesTheSelection() {
         assertEquals("play :c4", TextFieldValue("play 60", TextRange(5, 7)).insert(":c4").text)
+    }
+
+    @Test fun caretKeysMoveAsAKeyboardDoes() {
+        val v = TextFieldValue("abc\nde\nfghij", TextRange(2))
+        assertEquals(0, v.moved(CaretMove.Home).selection.start)
+        assertEquals(3, v.moved(CaretMove.End).selection.start)
+        assertEquals(1, v.moved(CaretMove.Left).selection.start)
+        assertEquals(3, v.moved(CaretMove.Right).selection.start)
+        assertEquals(0, v.moved(CaretMove.Up).selection.start)
+        assertEquals(6, v.moved(CaretMove.Down).selection.start)
+        assertEquals(12, TextFieldValue("abc\nde\nfghij", TextRange(11)).moved(CaretMove.Down).selection.start)
     }
 }
