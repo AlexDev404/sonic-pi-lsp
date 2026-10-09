@@ -238,7 +238,7 @@ fun KeyBar(
     canRedo: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val keys = listOf(":", ",", ".", "(", ")", "[", "]", "|", "\"", "#", "=", "_", "do", "end", "{", "}")
+    val keys = listOf("[", "]", "|", "\"", "#", "=", "_", "do", "end", "{", "}")
     val p = SonicPiColors
     Row(
         modifier
