@@ -1,5 +1,9 @@
 # Sonic Pi for Android
 
+<p>
+  <img src="branding/raster/app-icon-256.png" width="220" alt="SuperSonic Android logo">
+</p>
+
 [Sonic Pi](https://sonic-pi.net), running natively on an Android phone or
 tablet: the live-coding language, the synths, the samples and the FX, all on
 the device, with no server and no network.
