@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      signed:
+        description: "Sign the release APK with the keystore in the repository's secrets"
+        type: boolean
+        default: false
 
 jobs:
   # The native core on Linux: Sonic Pi programs rendered to audio and checked.
@@ -57,14 +62,40 @@ jobs:
         with:
           packages: "platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;29.0.14206865 cmake;3.31.6"
       - uses: gradle/actions/setup-gradle@v6
+      # A signed build (run by hand, "signed" ticked): the keystore from the secrets, base64 in
+      # ANDROID_KEYSTORE_BASE64, with ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD.
+      - name: Keystore
+        if: github.event_name == 'workflow_dispatch' && inputs.signed
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for s in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            [ -n "${!s}" ] || { echo "::error::the secret ANDROID_$s is not set"; exit 1; }
+          done
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          echo "SIGNING_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
       - name: Test and build
         working-directory: android
+        env:
+          SIGNING_KEYSTORE_PASSWORD: ${{ github.event_name == 'workflow_dispatch' && inputs.signed && secrets.ANDROID_KEYSTORE_PASSWORD || '' }}
+          SIGNING_KEY_ALIAS: ${{ github.event_name == 'workflow_dispatch' && inputs.signed && secrets.ANDROID_KEY_ALIAS || '' }}
+          SIGNING_KEY_PASSWORD: ${{ github.event_name == 'workflow_dispatch' && inputs.signed && secrets.ANDROID_KEY_PASSWORD || '' }}
         run: ./gradlew --no-daemon :app:testDebugUnitTest -Proborazzi.test.record=true :app:assembleDebug :app:assembleRelease
       - name: Name the APKs
         run: |
           mkdir -p apk
           cp android/app/build/outputs/apk/debug/app-debug.apk apk/sonic-pi-debug.apk
-          cp android/app/build/outputs/apk/release/app-release.apk apk/sonic-pi-release.apk
+          release=sonic-pi-release.apk
+          [ -n "$SIGNING_KEYSTORE" ] && release=sonic-pi-release-signed.apk
+          cp android/app/build/outputs/apk/release/app-release.apk "apk/$release"
+          # whose key signed it, in the log
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "apk/$release"
+      - name: Forget the keystore
+        if: always() && env.SIGNING_KEYSTORE != ''
+        run: rm -f "$SIGNING_KEYSTORE"
       - uses: actions/upload-artifact@v7
         with:
           name: sonic-pi-android-apk

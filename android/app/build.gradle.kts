@@ -43,14 +43,25 @@ android {
         }
     }
 
+    // A keystore named by the environment (as CI's signed build names one: .github/workflows/android.yml).
+    val keystore = providers.environmentVariable("SIGNING_KEYSTORE").orNull?.takeIf { it.isNotBlank() }
+    signingConfigs {
+        if (keystore != null) create("release") {
+            storeFile = file(keystore)
+            storePassword = providers.environmentVariable("SIGNING_KEYSTORE_PASSWORD").orNull
+            keyAlias = providers.environmentVariable("SIGNING_KEY_ALIAS").orNull
+            keyPassword = providers.environmentVariable("SIGNING_KEY_PASSWORD").orNull
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signed with the debug key so a CI build installs as it is; a store
-            // release signs with its own key.
-            signingConfig = signingConfigs.getByName("debug")
+            // Signed with that keystore when there is one; otherwise with the debug
+            // key, so a CI build installs as it is.
+            signingConfig = signingConfigs.getByName(if (keystore != null) "release" else "debug")
         }
     }
 

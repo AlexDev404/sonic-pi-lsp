@@ -8,3 +8,8 @@ android/build/
 android/app/.cxx/
 android/app/src/main/assets/sonicpi/
 .kotlin/
+
+# Signing secrets: never committed
+*.jks
+*.keystore
+.env

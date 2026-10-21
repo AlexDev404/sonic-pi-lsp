@@ -53,7 +53,7 @@ The app is made for a phone, in Sonic Pi's design language:
 - **Layout:** a top bar, with tabs at the bottom (a rail on a tablet).
 - **Colours:** the desktop's light and dark themes (`sonicpitheme.cpp`). The dark theme sits on the desktop's editor grey, with a slightly softer pink.
 - **Light or dark:** the app follows the phone's mode.
-- **Icons:** the toolbar glyphs (▶ ■ + ⌐ Δ) are the web version's own, tinted as it tints them. The app's icon, in the launcher and the top bar, is Sonic Pi's own, from the submodule; the build also cuts out its white glyph for Android's themed icons.
+- **Icons:** the toolbar glyphs (▶ ■ + ⌐ Δ) are the web version's own, tinted as it tints them. The app's icon, in the launcher and the top bar, is SuperSonic's, from `branding/raster/`; the build also cuts out its white glyph for Android's themed icons.
 
 - **Code.**
   - The top bar has run, which turns pink while a program plays, plus stop, load and save. A menu holds text size and clear log.
@@ -131,6 +131,24 @@ Each push builds everything and uploads these artifacts:
 | `sonic-pi-android-apk` | `sonic-pi-debug.apk` and `sonic-pi-release.apk` (the release APK is signed with the debug key) |
 | `sonic-pi-android-screenshots` | The app's screens, drawn by the screenshot tests |
 | `sonic-pi-native-renders` | Audio the core rendered from test programs |
+
+### Signed builds
+
+To sign the release APK with your own key, run the **Android** workflow by hand
+(Actions → Android → Run workflow) and tick **signed**. The APK is then
+`sonic-pi-release-signed.apk`. The workflow reads the keystore from these
+repository secrets:
+
+| Secret | What it holds |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | The keystore file, base64-encoded (`base64 -w0 release.jks`) |
+| `ANDROID_KEYSTORE_PASSWORD` | The keystore's password |
+| `ANDROID_KEY_ALIAS` | The key's alias in the keystore |
+| `ANDROID_KEY_PASSWORD` | The key's password |
+
+A local build signs the same way when `SIGNING_KEYSTORE` (the keystore's path),
+`SIGNING_KEYSTORE_PASSWORD`, `SIGNING_KEY_ALIAS` and `SIGNING_KEY_PASSWORD`
+are set.
 
 ## Licence
 
