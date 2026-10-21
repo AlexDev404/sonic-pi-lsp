@@ -203,7 +203,7 @@ private fun TopBar(state: AppUiState, actions: AppActions) {
     }
 }
 
-/** Sonic Pi's own icon (app/web/web/data/icon-256.png), as the app's mark. */
+/** SuperSonic's icon (branding/raster/app-icon-256.png), as the app's mark. */
 @Composable
 private fun AppIcon(modifier: Modifier) {
     val assets = LocalContext.current.assets
@@ -389,7 +389,7 @@ private fun Banner(text: String) {
     }
 }
 
-/** Starting: Sonic Pi's logo, and how far the sounds are unpacked. */
+/** Starting: SuperSonic's logo, and how far the sounds are unpacked. */
 @Composable
 private fun BootScreen(status: EngineStatus.Preparing) {
     val p = SonicPiColors

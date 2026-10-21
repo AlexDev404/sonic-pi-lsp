@@ -11,6 +11,8 @@ plugins {
 
 // The Sonic Pi checkout the app is built from (the submodule beside android/).
 val sonicPi: File = rootDir.resolve("../sonic-pi").canonicalFile
+// The app's own logos, as branding/generate.py renders them.
+val branding: File = rootDir.resolve("../branding/raster").canonicalFile
 val nativeOut = layout.buildDirectory.dir("sonicpi-native")
 val abis = listOf("arm64-v8a", "x86_64")
 
@@ -89,10 +91,11 @@ kotlin {
 // table the engine reads (extracted to the app's private storage on first
 // launch, since the engine opens files by path), the example programs, the
 // language reference for the Learn screen, the editor's completion data, the Hack font Sonic Pi's
-// editor uses, the web version's toolbar glyphs and the desktop's logo. manifest.txt lists the engine's files with their sizes, and its hash is
+// editor uses, the web version's toolbar glyphs, and the app's own icon and logo (from branding/). manifest.txt lists the engine's files with their sizes, and its hash is
 // the version the app compares to decide whether to extract again.
 abstract class PrepareSonicPiAssets : DefaultTask() {
     @get:Internal abstract val sonicPiRoot: Property<File>
+    @get:Internal abstract val brandingRoot: Property<File>
     @get:InputFiles @get:PathSensitive(PathSensitivity.RELATIVE) abstract val sources: ConfigurableFileCollection
     @get:OutputDirectory abstract val outputDir: DirectoryProperty
 
@@ -119,11 +122,12 @@ abstract class PrepareSonicPiAssets : DefaultTask() {
         for (ref in listOf("lang", "synths", "fx", "samples")) copyOne("app/web/web/data/reference/$ref.json", "reference/$ref.json")
         copyOne("app/web/web/data/completion.json", "completion.json")
         copyAll("app/gui/fonts", "fonts") { it.extension == "ttf" }
-        // The web version's toolbar glyphs (masks, tinted by the theme), and the desktop's logo for the splash.
+        // The web version's toolbar glyphs (masks, tinted by the theme), and the app's icon and its logo for the splash.
         for (g in listOf("run", "stop", "load", "save", "help")) copyOne("app/web/web/data/toolbar/$g.png", "gui/glyphs/$g.png")
-        copyOne("app/web/web/data/icon-256.png", "gui/icon.png")
-        copyOne("app/gui/images/logo-transparent.png", "gui/logo-light.png")
-        copyOne("app/gui/images/logo-transparent-dark.png", "gui/logo-dark.png")
+        val brand = brandingRoot.get()
+        brand.resolve("app-icon-256.png").copyTo(out.resolve("gui/icon.png"), overwrite = true)
+        brand.resolve("logotype-b-on-light@4x.png").copyTo(out.resolve("gui/logo-light.png"), overwrite = true)
+        brand.resolve("logotype-b-on-dark@4x.png").copyTo(out.resolve("gui/logo-dark.png"), overwrite = true)
 
         // The manifest lists what the engine opens by path (and so what is extracted); the rest is read from the APK.
         val engine = listOf("synthdefs/", "samples/", "buffers/", "piano_wavetable.dat")
@@ -136,17 +140,18 @@ abstract class PrepareSonicPiAssets : DefaultTask() {
 
 val prepareSonicPiAssets = tasks.register<PrepareSonicPiAssets>("prepareSonicPiAssets") {
     sonicPiRoot.set(sonicPi)
+    brandingRoot.set(branding)
     sources.from(
         sonicPi.resolve("etc/synthdefs/compiled"), sonicPi.resolve("etc/samples"), sonicPi.resolve("etc/buffers"),
         sonicPi.resolve("etc/examples"), sonicPi.resolve("app/web/web/data/reference"), sonicPi.resolve("app/web/web/data/completion.json"),
         sonicPi.resolve("app/external/piano/piano_wavetable.dat"), sonicPi.resolve("app/gui/fonts"),
-        sonicPi.resolve("app/web/web/data/toolbar"), sonicPi.resolve("app/web/web/data/icon-256.png"),
-        sonicPi.resolve("app/gui/images/logo-transparent.png"),
-        sonicPi.resolve("app/gui/images/logo-transparent-dark.png"))
+        sonicPi.resolve("app/web/web/data/toolbar"), branding.resolve("app-icon-256.png"),
+        branding.resolve("logotype-b-on-light@4x.png"),
+        branding.resolve("logotype-b-on-dark@4x.png"))
     outputDir.set(layout.buildDirectory.dir("generated/sonicpi-assets"))
 }
 
-// The app's icon is Sonic Pi's own (app/web/web/data/icon.png: π))) on pink):
+// The app's icon is SuperSonic's (branding/raster/app-icon-1024.png: the mark in white on pink):
 // as it is, and its white glyph alone as a mask, for Android's themed icons.
 abstract class PrepareSonicPiIcon : DefaultTask() {
     @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val icon: RegularFileProperty
@@ -165,7 +170,7 @@ abstract class PrepareSonicPiIcon : DefaultTask() {
             val argb = image.getRGB(x, y)
             val a = argb ushr 24
             val least = minOf((argb shr 16) and 0xff, (argb shr 8) and 0xff, argb and 0xff)
-            // white is the glyph; the pink (whose least channel is its green, ~47) is not
+            // white is the glyph; the pink (whose least channel is its green, 0) is not
             val glyph = (((least - 120) * 255) / 135).coerceIn(0, 255) * a / 255
             mono.setRGB(x, y, (glyph shl 24) or 0xffffff)
         }
@@ -174,7 +179,7 @@ abstract class PrepareSonicPiIcon : DefaultTask() {
 }
 
 val prepareSonicPiIcon = tasks.register<PrepareSonicPiIcon>("prepareSonicPiIcon") {
-    icon.set(sonicPi.resolve("app/web/web/data/icon.png"))
+    icon.set(branding.resolve("app-icon-1024.png"))
     outputDir.set(layout.buildDirectory.dir("generated/sonicpi-res"))
 }
 

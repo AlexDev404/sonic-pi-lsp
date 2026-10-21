@@ -79,7 +79,7 @@ The app is made for a phone, in Sonic Pi's design language:
   - The desktop's help panel, with pill tabs for Examples, Lang, Synths, Fx and Samples.
   - Each tab has a filter and a list, and each page has a pink title and rule.
   - Code opens into the current buffer, and tapping a sample plays it.
-  - The splash screen is the desktop's logo.
+  - The splash screen is SuperSonic's logo (`branding/`).
 
 ### Android 16 and storage
 
