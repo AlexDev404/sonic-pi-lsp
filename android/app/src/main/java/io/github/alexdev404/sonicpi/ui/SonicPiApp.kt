@@ -183,7 +183,7 @@ private fun TopBar(state: AppUiState, actions: AppActions) {
     ) {
         AppIcon(Modifier.size(30.dp))
         Spacer(Modifier.width(10.dp))
-        Text("Sonic Pi", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = p.Foreground)
+        Text("SuperSonic", fontSize = 21.sp, fontWeight = FontWeight.Bold, color = p.Foreground)
         Spacer(Modifier.weight(1f))
         GlyphButton("run", R.drawable.ic_play, "Run", if (state.running) p.Pink else p.Foreground, ready, actions.run)
         GlyphButton("stop", R.drawable.ic_stop, "Stop", p.Foreground, ready, actions.stop)
@@ -332,7 +332,7 @@ private fun CodePane(state: AppUiState, actions: AppActions, peek: Boolean, onPe
     Column(modifier.fillMaxHeight()) {
         BufferStrip(state.buffers.size, state.current, onSelect = actions.selectBuffer)
         if (state.status is EngineStatus.Failed) {
-            Banner("Sonic Pi could not start: ${state.status.message}")
+            Banner("SuperSonic could not start: ${state.status.message}")
         }
         val lastError = state.log.lastOrNull { it.kind == LogKind.Error }
         AnimatedVisibility(visible = state.errorLine > 0 && lastError != null) {
@@ -403,9 +403,9 @@ private fun BootScreen(status: EngineStatus.Preparing) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (logo != null) {
-            Image(logo, contentDescription = "Sonic Pi", modifier = Modifier.fillMaxWidth(0.7f))
+            Image(logo, contentDescription = "SuperSonic", modifier = Modifier.fillMaxWidth(0.7f))
         } else {
-            Text("Sonic Pi", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = p.Foreground)
+            Text("SuperSonic", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = p.Foreground)
         }
         Spacer(Modifier.height(32.dp))
         Box(Modifier.fillMaxWidth(0.7f).height(4.dp).background(p.Base)) {

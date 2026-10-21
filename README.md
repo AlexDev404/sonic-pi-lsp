@@ -1,8 +1,8 @@
-# Sonic Pi for Android
+# SuperSonic
 
-[Sonic Pi](https://sonic-pi.net), running natively on an Android phone or
-tablet: the live-coding language, the synths, the samples and the FX, all on
-the device, with no server and no network.
+SuperSonic is [Sonic Pi](https://sonic-pi.net), running natively on an
+Android phone or tablet: the live-coding language, the synths, the samples
+and the FX, all on the device, with no server and no network.
 
 <p>
   <img src="docs/screenshots/phone-code.png" width="220" alt="The code editor on a phone">
