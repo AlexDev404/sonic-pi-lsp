@@ -33,10 +33,18 @@ cp -r "$ROOT/lint/lib" "$DEST/lint/"
 # Sonic Pi's own release does), and the native binaries.
 [ -f "$SP/VERSION" ] && cp "$SP/VERSION" "$DEST/sonic-pi/"
 cp -r "$SP/app/config/user-examples" "$DEST/sonic-pi/app/config/"
-cp -r "$SP/app/server/ruby" "$DEST/sonic-pi/app/server/"
-rm -rf "$DEST/sonic-pi/app/server/ruby/test" "$DEST/sonic-pi/app/server/ruby/Rakefile"
-for f in "$DEST"/sonic-pi/app/server/ruby/vendor/*/*; do
-  [ "$(basename "$f")" = "lib" ] || rm -rf "$f"
+# Copy the gems' lib directories only: the rest (sources, tests) is not
+# needed, and libgit2's test fixtures hold symlinks Windows cannot create.
+RB="$SP/app/server/ruby"
+mkdir -p "$DEST/sonic-pi/app/server/ruby/vendor"
+for f in "$RB"/*; do
+  case "$(basename "$f")" in vendor|test|Rakefile) continue ;; esac
+  cp -r "$f" "$DEST/sonic-pi/app/server/ruby/"
+done
+for g in "$RB"/vendor/*/; do
+  name="$(basename "$g")"
+  mkdir -p "$DEST/sonic-pi/app/server/ruby/vendor/$name"
+  [ -d "$g/lib" ] && cp -r "$g/lib" "$DEST/sonic-pi/app/server/ruby/vendor/$name/"
 done
 cp -r "$SP/app/server/native" "$DEST/sonic-pi/app/server/"
 rm -f "$DEST/sonic-pi/app/server/native/.gitkeep" "$DEST/sonic-pi/app/server/native/"*.pdb
