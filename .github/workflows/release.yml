@@ -45,7 +45,7 @@ jobs:
         # The Ruby extensions are built for each distribution's own Ruby.
         os: [ubuntu-24.04, ubuntu-22.04]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.REF }}
           submodules: recursive
@@ -60,9 +60,10 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: false
 
       - name: Build the Sonic Pi server
         run: scripts/build-server-linux.sh
@@ -80,7 +81,7 @@ jobs:
           printf 'use_synth :prophet\nplay 60\n' > ok.rb
           sonicpi lint --use-defaults ok.rb
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: linux-${{ matrix.os }}
           path: dist/*
@@ -90,16 +91,17 @@ jobs:
     name: Windows
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.REF }}
           submodules: recursive
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: false
 
       # The native parts are built before Ruby is installed: RubyInstaller's
       # MSYS2 toolchain on PATH breaks vcpkg's MSVC builds (its cmake and
@@ -185,7 +187,7 @@ jobs:
           printf 'use_synth :prophet\nplay 60\n' > ok.rb
           build/package/sonicpi-cli/sonicpi.exe lint --use-defaults ok.rb
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: windows
           path: dist/*
@@ -199,7 +201,7 @@ jobs:
     if: ${{ !cancelled() && needs.windows.result == 'success' && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with:
           path: dist
           merge-multiple: true
