@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -205,12 +206,79 @@ Run "sonicpi <command> --help" for a command's flags.
 // newFlags makes a flag set for a command, with the global flags included.
 func newFlags(g *Globals, c string, usage string) *flag.FlagSet {
 	fs := flag.NewFlagSet(c, flag.ContinueOnError)
-	fs.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s\n\nFlags:\n", usage)
-		fs.PrintDefaults()
-	}
+	fs.Usage = func() { printUsage(os.Stderr, fs, usage) }
 	g.register(fs)
 	return fs
+}
+
+// globalFlags are the flags every command takes, listed apart in help.
+var globalFlags = map[string]bool{"watch": true, "w": true, "no-color": true, "json": true, "no-autostart": true, "quiet": true, "q": true}
+
+// printUsage prints a command's flags GNU style: a shorthand beside its
+// long flag (-d, --detach), --x and --no-x on one line, and the global
+// flags at the end.
+func printUsage(w io.Writer, fs *flag.FlagSet, usage string) {
+	fmt.Fprintf(w, "Usage: %s\n", usage)
+	short := map[string]string{} // long name -> shorthand
+	skip := map[string]bool{}
+	fs.VisitAll(func(f *flag.Flag) {
+		if long, ok := strings.CutPrefix(f.Usage, "shorthand for --"); ok && len(f.Name) == 1 {
+			short[long] = f.Name
+			skip[f.Name] = true
+		}
+		if strings.HasPrefix(f.Usage, "opposite of --") {
+			skip[f.Name] = true
+		}
+	})
+	type row struct{ left, usage string }
+	var own, global []row
+	fs.VisitAll(func(f *flag.Flag) {
+		if skip[f.Name] {
+			return
+		}
+		left := "    "
+		if s, ok := short[f.Name]; ok {
+			left = "-" + s + ", "
+		}
+		if len(f.Name) == 1 {
+			left += "-" + f.Name
+		} else {
+			left += "--" + f.Name
+		}
+		if _, isSwitch := f.Value.(*switchValue); isSwitch {
+			left += ", --no-" + f.Name
+		}
+		typ, text := flag.UnquoteUsage(f)
+		if typ != "" {
+			left += " " + strings.ToUpper(typ)
+		}
+		switch f.DefValue {
+		case "", "0", "false", "-1", "0s":
+		default:
+			text += " (default " + f.DefValue + ")"
+		}
+		r := row{left, text}
+		if globalFlags[f.Name] {
+			global = append(global, r)
+		} else {
+			own = append(own, r)
+		}
+	})
+	width := 0
+	for _, r := range append(own, global...) {
+		width = max(width, len(r.left))
+	}
+	show := func(title string, rows []row) {
+		if len(rows) == 0 {
+			return
+		}
+		fmt.Fprintf(w, "\n%s:\n", title)
+		for _, r := range rows {
+			fmt.Fprintf(w, "  %-*s  %s\n", width, r.left, r.usage)
+		}
+	}
+	show("Flags", own)
+	show("Global flags", global)
 }
 
 // parse parses flags anywhere among the arguments (until "--") and returns
@@ -248,29 +316,28 @@ type boolFlag struct {
 }
 
 func (b *boolFlag) register(fs *flag.FlagSet, name, usage string) {
-	fs.Func(name, usage, func(s string) error {
-		b.set, b.val = true, s == "" || s == "true"
-		return nil
-	})
-	f := fs.Lookup(name)
-	f.DefValue = ""
-	fs.Func("no-"+name, "opposite of --"+name, func(string) error {
-		b.set, b.val = true, false
-		return nil
-	})
-	markBool(fs, name)
-	markBool(fs, "no-"+name)
+	fs.Var(&switchValue{b: b, on: true}, name, usage)
+	fs.Var(&switchValue{b: b, on: false}, "no-"+name, "opposite of --"+name)
 }
 
-// markBool lets a Func flag be given without a value.
-func markBool(fs *flag.FlagSet, name string) {
-	f := fs.Lookup(name)
-	f.Value = boolValue{f.Value}
+// switchValue is one side of a --name / --no-name pair. Its methods must
+// work on the zero value, which the flag package makes to print help.
+type switchValue struct {
+	b  *boolFlag
+	on bool
 }
 
-type boolValue struct{ flag.Value }
+func (v *switchValue) String() string   { return "" }
+func (v *switchValue) IsBoolFlag() bool { return true }
 
-func (boolValue) IsBoolFlag() bool { return true }
+func (v *switchValue) Set(s string) error {
+	val, err := strconv.ParseBool(s)
+	if err != nil {
+		return fmt.Errorf("takes true or false, got %q", s)
+	}
+	v.b.set, v.b.val = true, val == v.on
+	return nil
+}
 
 func (b *boolFlag) or(def bool) bool {
 	if b.set {

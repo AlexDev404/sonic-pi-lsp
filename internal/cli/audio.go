@@ -103,7 +103,7 @@ func cmdMixer(g *Globals, args []string) error {
 	slide := fs.Float64("slide", 0, "slide filter changes over this many beats")
 	reset := fs.Bool("reset", false, "reset the filters and limiter to their defaults")
 	amp := fs.Float64("amp", -1, "set the mixer amp directly (0-2) without saving it (Sonic Pi 4)")
-	drive := fs.Int("drive", -1, "drive: gain before the limiter in percent, 100 is unity (saved; Sonic Pi 5)")
+	drive := fs.Int("drive", -1, "drive: gain before the limiter, `PCT` percent, 100 is unity (saved; Sonic Pi 5)")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}

@@ -68,3 +68,41 @@ func TestFmtKeepsShortWrite(t *testing.T) {
 		t.Fatalf("lint: got %v, watch=%v", got, g.Watch)
 	}
 }
+
+// TestHelpForEveryCommand prints each command's --help, which used to
+// panic for --x/--no-x switches.
+func TestHelpForEveryCommand(t *testing.T) {
+	for _, c := range commands {
+		if c.name == "lint" || c.name == "fmt" {
+			continue // their help comes from the Ruby tool
+		}
+		g := &Globals{}
+		fs := newFlags(g, c.name, c.usage)
+		var r runFlags
+		r.register(fs)
+		var b strings.Builder
+		printUsage(&b, fs, c.usage)
+		out := b.String()
+		for _, bad := range []string{"panic", "\n  -check-args", "zero cli."} {
+			if strings.Contains(out, bad) {
+				t.Fatalf("%s help contains %q:\n%s", c.name, bad, out)
+			}
+		}
+		if !strings.Contains(out, "--synths, --no-synths") || !strings.Contains(out, "-d, --detach") {
+			t.Fatalf("%s help:\n%s", c.name, out)
+		}
+	}
+}
+
+func TestSwitchValues(t *testing.T) {
+	g := &Globals{}
+	fs := newFlags(g, "x", "x")
+	var b boolFlag
+	b.register(fs, "synths", "")
+	if _, err := parse(fs, []string{"--synths=false"}); err != nil || !b.set || b.val {
+		t.Fatalf("--synths=false: %+v %v", b, err)
+	}
+	if _, err := parse(fs, []string{"--no-synths=false"}); err != nil || !b.val {
+		t.Fatalf("--no-synths=false: %+v %v", b, err)
+	}
+}

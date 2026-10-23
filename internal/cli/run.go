@@ -73,7 +73,7 @@ func (r *runFlags) register(fs *flag.FlagSet) {
 	fs.BoolVar(&r.lint, "lint", false, "lint the file first and refuse to play it if there are errors")
 	fs.DurationVar(&r.timeout, "timeout", 0, "stop everything after this long (e.g. 30s, 2m)")
 	fs.DurationVar(&r.linger, "linger", 0, "keep listening this long after all runs complete (default 2s with --record)")
-	fs.StringVar(&r.record, "record", "", "record the output to this .wav file")
+	fs.StringVar(&r.record, "record", "", "record the output to this `FILE` (.wav)")
 	fs.BoolVar(&r.noStop, "no-stop", false, "on Ctrl-C, leave the music playing instead of stopping it")
 	fs.BoolVar(&r.timestamps, "timestamps", false, "prefix log lines with the time")
 	r.synths.register(fs, "synths", "log synth and sample triggers (default: the log-synths setting)")
@@ -81,7 +81,7 @@ func (r *runFlags) register(fs *flag.FlagSet) {
 	r.checkArgs.register(fs, "check-args", "check synth and FX opts (default: the check-args setting)")
 	r.external.register(fs, "external-synths", "allow external synths (default: the enable-external-synths setting)")
 	r.timing.register(fs, "timing-guarantees", "drop late synths (default: the synth-trigger-timing-guarantees setting)")
-	fs.IntVar(&r.midiChannel, "midi-channel", -1, "default MIDI channel, 0 for all (default: the midi-default-channel setting)")
+	fs.IntVar(&r.midiChannel, "midi-channel", -1, "default MIDI channel `N`, 0 for all (default: the midi-default-channel setting)")
 }
 
 func (r *runFlags) overrides() map[string]string {

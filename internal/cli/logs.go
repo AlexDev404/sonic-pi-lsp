@@ -44,10 +44,10 @@ var sources = map[string]string{
 
 func cmdLogs(g *Globals, args []string) error {
 	fs := newFlags(g, "logs", "sonicpi [--watch] logs [flags]")
-	follow := fs.Bool("f", false, "follow the log (same as --watch)")
-	fs.BoolVar(follow, "follow", false, "follow the log (same as --watch)")
-	n := fs.Int("n", 100, "show this many past events (-1 for all, 0 for none)")
-	fs.IntVar(n, "lines", 100, "same as -n")
+	follow := fs.Bool("follow", false, "follow the log (same as --watch)")
+	fs.BoolVar(follow, "f", false, "shorthand for --follow")
+	n := fs.Int("lines", 100, "show the last `N` events (-1 for all, 0 for none)")
+	fs.IntVar(n, "n", 100, "shorthand for --lines")
 	var synths, cues, puts, info, warnings boolFlag
 	synths.register(fs, "synths", "show synth and sample triggers (default: the log-synths setting)")
 	cues.register(fs, "cues", "show cues, syncs and incoming OSC/MIDI (default: the log-cues setting)")
@@ -55,12 +55,12 @@ func cmdLogs(g *Globals, args []string) error {
 	info.register(fs, "info", "show server and service notices (default on)")
 	warnings.register(fs, "warnings", "show warnings (default on)")
 	errorsOnly := fs.Bool("errors", false, "show only errors")
-	run := fs.Int("run", 0, "show only this run")
-	thread := fs.String("thread", "", "show only this thread (live_loop name)")
+	run := fs.Int("run", 0, "show only run `N`")
+	thread := fs.String("thread", "", "show only this thread, by live_loop `NAME`")
 	timestamps := fs.Bool("timestamps", false, "prefix events with the time")
 	fs.BoolVar(timestamps, "t", false, "shorthand for --timestamps")
 	since := fs.Duration("since", 0, "show only events newer than this (e.g. 10m)")
-	source := fs.String("source", "", "show a raw server log instead: "+strings.Join(sourceNames(), ", "))
+	source := fs.String("source", "", "show the raw server log `NAME` instead: "+strings.Join(sourceNames(), ", "))
 	showPath := fs.Bool("path", false, "print the log directory and exit")
 	clear := fs.Bool("clear", false, "start a fresh session log (the old one is kept as .1)")
 	if _, err := parse(fs, args); err != nil {
