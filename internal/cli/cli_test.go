@@ -55,3 +55,16 @@ func TestReplDepth(t *testing.T) {
 		}
 	}
 }
+
+func TestFmtKeepsShortWrite(t *testing.T) {
+	g := &Globals{}
+	got := stripGlobals(g, []string{"-w", "song.rb", "--json"}, "-w")
+	if strings.Join(got, " ") != "-w song.rb" || g.Watch || !g.JSON {
+		t.Fatalf("got %v, watch=%v json=%v", got, g.Watch, g.JSON)
+	}
+	// lint keeps -w as --watch.
+	g = &Globals{}
+	if got := stripGlobals(g, []string{"-w", "song.rb"}); strings.Join(got, " ") != "song.rb" || !g.Watch {
+		t.Fatalf("lint: got %v, watch=%v", got, g.Watch)
+	}
+}

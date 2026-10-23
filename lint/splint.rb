@@ -375,11 +375,15 @@ module Splint
         elsif o[:diff]
           puts diff(f, src, out) if changed
         elsif o[:write] && f != "-"
-          File.write(f, out) if changed
+          if changed
+            File.write(f, out)
+            warn "aligned #{f}"
+          end
         else
           $stdout.write(out)
         end
       end
+      warn "#{files.size == 1 ? files.first : 'all files'}: already aligned" if o[:write] && unaligned.zero? && broken.zero?
       broken.positive? || (o[:check] && unaligned.positive?) ? EXIT_PROBLEMS : EXIT_OK
     end
   end

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 
 	"github.com/AlexDev404/sonic-pi-lsp/internal/paths"
 )
@@ -66,12 +67,18 @@ func passGlobals(g *Globals, args []string) []string {
 	return args
 }
 
-// stripGlobals removes the global flags the Go side already handled.
-func stripGlobals(g *Globals, args []string) []string {
+// stripGlobals removes the global flags the Go side already handled,
+// except those in keep, which mean something else to the Ruby tool
+// (fmt's -w is --write, not --watch).
+func stripGlobals(g *Globals, args []string, keep ...string) []string {
 	var out []string
 	for i, a := range args {
 		if a == "--" {
 			return append(out, args[i:]...)
+		}
+		if slices.Contains(keep, a) {
+			out = append(out, a)
+			continue
 		}
 		switch a {
 		case "--json", "-json":
@@ -106,7 +113,7 @@ func cmdLint(g *Globals, args []string) error {
 }
 
 func cmdFmt(g *Globals, args []string) error {
-	args = stripGlobals(g, args)
+	args = stripGlobals(g, args, "-w")
 	code, err := rubyTool(g, append([]string{"fmt"}, args...))
 	if err != nil {
 		return err
