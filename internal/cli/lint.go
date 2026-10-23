@@ -3,10 +3,12 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/AlexDev404/sonic-pi-lsp/internal/paths"
 )
@@ -30,6 +32,10 @@ func init() {
 // rubyTool runs the bundled Ruby tool (lint/splint.rb) with args and
 // returns its exit code.
 func rubyTool(g *Globals, args []string) (int, error) {
+	return rubyToolIn(g, args, os.Stdin)
+}
+
+func rubyToolIn(g *Globals, args []string, stdin io.Reader) (int, error) {
 	root, err := paths.Root()
 	if err != nil {
 		return 0, err
@@ -44,7 +50,7 @@ func rubyTool(g *Globals, args []string) (int, error) {
 	}
 	full = append(full, args...)
 	cmd := exec.Command(paths.Ruby(root), full...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, os.Stdout, os.Stderr
 	err = cmd.Run()
 	var ee *exec.ExitError
 	if errors.As(err, &ee) {
@@ -67,37 +73,45 @@ func passGlobals(g *Globals, args []string) []string {
 	return args
 }
 
-// stripGlobals removes the global flags the Go side already handled,
-// except those in keep, which mean something else to the Ruby tool
-// (fmt's -w is --write, not --watch).
-func stripGlobals(g *Globals, args []string, keep ...string) []string {
+// stripGlobals takes out of args the shared flags that cmd uses (the Go
+// side handles them) and leaves everything else for the Ruby tool. So
+// fmt's -w stays --write: fmt does not take --watch.
+func stripGlobals(g *Globals, cmd string, args []string) []string {
+	uses := globalsFor(cmd)
 	var out []string
 	for i, a := range args {
 		if a == "--" {
 			return append(out, args[i:]...)
 		}
-		if slices.Contains(keep, a) {
+		name := strings.TrimLeft(a, "-")
+		switch name {
+		case "w":
+			name = gWatch
+		case "q":
+			name = gQuiet
+		}
+		if !strings.HasPrefix(a, "-") || !slices.Contains(uses, name) {
 			out = append(out, a)
 			continue
 		}
-		switch a {
-		case "--json", "-json":
+		switch name {
+		case gJSON:
 			g.JSON = true
-		case "--no-color", "-no-color":
+		case gNoColor:
 			g.NoColor = true
-		case "--quiet", "-quiet", "-q":
+		case gQuiet:
 			g.Quiet = true
-		case "--watch", "-watch", "-w":
+		case gWatch:
 			g.Watch = true
-		default:
-			out = append(out, a)
+		case gNoAutostart:
+			g.NoAutostart = true
 		}
 	}
 	return out
 }
 
 func cmdLint(g *Globals, args []string) error {
-	args = stripGlobals(g, args)
+	args = stripGlobals(g, "lint", args)
 	args = passGlobals(g, args)
 	if g.Watch {
 		args = append([]string{"--watch"}, args...)
@@ -113,13 +127,25 @@ func cmdLint(g *Globals, args []string) error {
 }
 
 func cmdFmt(g *Globals, args []string) error {
-	args = stripGlobals(g, args, "-w")
+	args = stripGlobals(g, "fmt", args)
 	code, err := rubyTool(g, append([]string{"fmt"}, args...))
 	if err != nil {
 		return err
 	}
 	if code != 0 {
 		return &exitError{code: code}
+	}
+	return nil
+}
+
+// lintCodeBeforeRun lints code that is not in a file (eval) the same way.
+func lintCodeBeforeRun(g *Globals, name, code string) error {
+	code2, err := rubyToolIn(g, []string{"lint", "--use-defaults", "--fail-on", "error", "--quiet", "--stdin", "--stdin-filename", name}, strings.NewReader(code))
+	if err != nil {
+		return err
+	}
+	if code2 != 0 {
+		return exitCode(code2, "not playing it: the linter found errors")
 	}
 	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,7 +19,8 @@ import (
 	"github.com/AlexDev404/sonic-pi-lsp/internal/svcmgr"
 )
 
-// Globals are the flags every command accepts.
+// Globals are the flags shared between commands. Each command takes only
+// the ones it uses (see commandGlobals).
 type Globals struct {
 	Watch       bool
 	NoColor     bool
@@ -27,14 +29,81 @@ type Globals struct {
 	Quiet       bool
 }
 
-func (g *Globals) register(fs *flag.FlagSet) {
-	fs.BoolVar(&g.Watch, "watch", g.Watch, "keep watching: follow the log, or re-run a file when it changes")
-	fs.BoolVar(&g.Watch, "w", g.Watch, "shorthand for --watch")
-	fs.BoolVar(&g.NoColor, "no-color", g.NoColor, "disable colour (also NO_COLOR=1)")
-	fs.BoolVar(&g.JSON, "json", g.JSON, "machine-readable JSON output")
-	fs.BoolVar(&g.NoAutostart, "no-autostart", g.NoAutostart, "don't start the service if it isn't running")
-	fs.BoolVar(&g.Quiet, "quiet", g.Quiet, "print less")
-	fs.BoolVar(&g.Quiet, "q", g.Quiet, "shorthand for --quiet")
+// The shared flags, by name.
+const (
+	gWatch       = "watch"
+	gNoColor     = "no-color"
+	gJSON        = "json"
+	gNoAutostart = "no-autostart"
+	gQuiet       = "quiet"
+)
+
+var allGlobals = []string{gWatch, gNoColor, gJSON, gNoAutostart, gQuiet}
+
+// commandGlobals lists the shared flags each command uses. lint and fmt
+// hand theirs to the Ruby tool, which documents its own.
+var commandGlobals = map[string][]string{
+	"run":        {gWatch, gNoColor, gJSON, gNoAutostart, gQuiet},
+	"buffer":     {gWatch, gNoColor, gJSON, gNoAutostart, gQuiet},
+	"eval":       {gNoColor, gJSON, gNoAutostart, gQuiet},
+	"repl":       {gNoColor, gJSON, gNoAutostart, gQuiet},
+	"logs":       {gWatch, gNoColor, gJSON},
+	"lint":       {gWatch, gNoColor, gJSON, gQuiet},
+	"fmt":        {gNoColor},
+	"config":     {gJSON, gQuiet},
+	"status":     {gJSON},
+	"version":    {gJSON},
+	"service":    {gJSON},
+	"midi":       {gJSON, gNoAutostart},
+	"reboot":     {gNoAutostart, gQuiet},
+	"record":     {gNoAutostart, gQuiet},
+	"timewarp":   {gNoAutostart, gQuiet},
+	"stop":       {gNoAutostart},
+	"mixer":      {gNoAutostart},
+	"osc":        {gNoAutostart},
+	"link":       {gNoAutostart},
+	"setup":      {gQuiet},
+	"volume":     {},
+	"doctor":     {},
+	"completion": {},
+}
+
+func globalsFor(cmd string) []string {
+	if gs, ok := commandGlobals[cmd]; ok {
+		return gs
+	}
+	return allGlobals
+}
+
+func (g *Globals) register(fs *flag.FlagSet, names []string) {
+	for _, n := range names {
+		switch n {
+		case gWatch:
+			fs.BoolVar(&g.Watch, "watch", g.Watch, "keep watching: follow the log, or re-run a file when it changes")
+			fs.BoolVar(&g.Watch, "w", g.Watch, "shorthand for --watch")
+		case gNoColor:
+			fs.BoolVar(&g.NoColor, "no-color", g.NoColor, "disable colour (also NO_COLOR=1)")
+		case gJSON:
+			fs.BoolVar(&g.JSON, "json", g.JSON, "machine-readable JSON output")
+		case gNoAutostart:
+			fs.BoolVar(&g.NoAutostart, "no-autostart", g.NoAutostart, "don't start the service if it isn't running")
+		case gQuiet:
+			fs.BoolVar(&g.Quiet, "quiet", g.Quiet, "print less")
+			fs.BoolVar(&g.Quiet, "q", g.Quiet, "shorthand for --quiet")
+		}
+	}
+}
+
+// given lists the shared flags set before the command name.
+func (g *Globals) given() []string {
+	var out []string
+	for n, on := range map[string]bool{gWatch: g.Watch, gNoColor: g.NoColor, gJSON: g.JSON, gNoAutostart: g.NoAutostart, gQuiet: g.Quiet} {
+		if on {
+			out = append(out, n)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Color reports whether to use ANSI colour on stdout.
@@ -151,6 +220,13 @@ func Main(args []string) int {
 			return ExitUsage
 		}
 	}
+	// A shared flag given before the command must be one it uses.
+	for _, n := range g.given() {
+		if !slices.Contains(globalsFor(c.name), n) {
+			fmt.Fprintf(os.Stderr, "sonicpi: %s does not take --%s\n\nUsage: %s\n", c.name, n, c.usage)
+			return ExitUsage
+		}
+	}
 	err := c.run(g, cargs)
 	if err == nil {
 		return ExitOK
@@ -192,7 +268,7 @@ Commands:
 		fmt.Fprintf(w, "  %-12s %s\n", c.name, c.summary)
 	}
 	fmt.Fprint(w, `
-Global flags (before or after the command):
+Shared flags (before or after the command, for the commands that use them):
   -w, --watch        keep watching (follow logs, re-run a file on save)
       --json         JSON output
       --no-color     no ANSI colour
@@ -206,8 +282,9 @@ Run "sonicpi <command> --help" for a command's flags.
 // newFlags makes a flag set for a command, with the global flags included.
 func newFlags(g *Globals, c string, usage string) *flag.FlagSet {
 	fs := flag.NewFlagSet(c, flag.ContinueOnError)
+	fs.SetOutput(io.Discard) // parse reports errors itself, once
 	fs.Usage = func() { printUsage(os.Stderr, fs, usage) }
-	g.register(fs)
+	g.register(fs, globalsFor(c))
 	return fs
 }
 
@@ -292,13 +369,24 @@ func parse(fs *flag.FlagSet, args []string) ([]string, error) {
 			break
 		}
 	}
+	// The flag package prints the usage on any error; show it for --help only.
+	usage := fs.Usage
+	fs.Usage = func() {}
+	defer func() { fs.Usage = usage }()
 	var pos []string
 	for {
 		if err := fs.Parse(args); err != nil {
 			if errors.Is(err, flag.ErrHelp) {
+				usage()
 				return nil, err
 			}
-			return nil, usageError("%v", err)
+			msg := err.Error()
+			if name, ok := strings.CutPrefix(msg, "flag provided but not defined: -"); ok {
+				msg = fmt.Sprintf("%s does not take --%s (sonicpi %s --help lists its flags)", fs.Name(), strings.TrimLeft(name, "-"), fs.Name())
+			} else {
+				msg = strings.Replace(msg, "flag -", "--", 1)
+			}
+			return nil, usageError("%s", msg)
 		}
 		rest := fs.Args()
 		if len(rest) == 0 {

@@ -18,7 +18,7 @@ func init() {
 		name:    "buffer",
 		aliases: []string{"buffers", "buf"},
 		summary: "the desktop's ten buffers: list, show, run, edit, load a file into one",
-		usage:   "sonicpi buffer [list|show N|run N|edit N|load N FILE|save N FILE]",
+		usage:   "sonicpi buffer [list|show N|run N|edit N|load N FILE|save N FILE]   (the flags are for buffer run)",
 		run:     cmdBuffer,
 	})
 }
@@ -46,7 +46,7 @@ func readBuffer(n int) (string, error) {
 }
 
 func cmdBuffer(g *Globals, args []string) error {
-	fs := newFlags(g, "buffer", "sonicpi buffer [list|show N|run N|edit N|load N FILE|save N FILE]")
+	fs := newFlags(g, "buffer", "sonicpi buffer [list|show N|run N|edit N|load N FILE|save N FILE]\n\nThe flags below apply to buffer run, which plays like sonicpi run.")
 	var r runFlags
 	r.register(fs)
 	pos, err := parse(fs, args)
@@ -106,6 +106,11 @@ func cmdBuffer(g *Globals, args []string) error {
 		code, err := readBuffer(n)
 		if err != nil {
 			return err
+		}
+		if r.lint {
+			if err := lintBeforeRun(g, bufferPath(n)); err != nil {
+				return err
+			}
 		}
 		return play(g, &r, fmt.Sprintf("buffer %d", n), code, func() (string, bool) {
 			c, err := readBuffer(n)

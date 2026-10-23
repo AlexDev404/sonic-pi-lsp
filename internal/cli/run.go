@@ -184,8 +184,13 @@ func cmdEval(g *Globals, args []string) error {
 	if len(pos) == 0 {
 		return usageError("eval needs code, e.g. sonicpi eval 'play 60'")
 	}
-	g.Watch = false
-	return play(g, &r, "eval", strings.Join(pos, " "), nil, "")
+	code := strings.Join(pos, " ")
+	if r.lint {
+		if err := lintCodeBeforeRun(g, "eval.rb", code); err != nil {
+			return err
+		}
+	}
+	return play(g, &r, "eval", code, nil, "")
 }
 
 // play runs code and, unless detached, shows what it does until all runs

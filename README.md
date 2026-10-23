@@ -284,7 +284,8 @@ sonicpi config path init                    # where a file is
 | `sonicpi doctor` | check the installation |
 | `sonicpi completion bash\|zsh\|fish\|powershell` | shell completion |
 
-Global flags go before or after the command: `--watch`, `--json`,
+Shared flags go before or after the command, on the commands that use
+them (each command's `--help` lists its own): `--watch`, `--json`,
 `--no-color` (or `NO_COLOR=1`), `--quiet`, and `--no-autostart` (fail
 instead of starting the service).
 

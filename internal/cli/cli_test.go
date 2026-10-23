@@ -58,13 +58,13 @@ func TestReplDepth(t *testing.T) {
 
 func TestFmtKeepsShortWrite(t *testing.T) {
 	g := &Globals{}
-	got := stripGlobals(g, []string{"-w", "song.rb", "--json"}, "-w")
-	if strings.Join(got, " ") != "-w song.rb" || g.Watch || !g.JSON {
-		t.Fatalf("got %v, watch=%v json=%v", got, g.Watch, g.JSON)
+	got := stripGlobals(g, "fmt", []string{"-w", "song.rb", "--no-color", "--json"})
+	if strings.Join(got, " ") != "-w song.rb --json" || g.Watch || !g.NoColor || g.JSON {
+		t.Fatalf("got %v, watch=%v nocolor=%v json=%v", got, g.Watch, g.NoColor, g.JSON)
 	}
-	// lint keeps -w as --watch.
+	// lint takes -w as --watch.
 	g = &Globals{}
-	if got := stripGlobals(g, []string{"-w", "song.rb"}); strings.Join(got, " ") != "song.rb" || !g.Watch {
+	if got := stripGlobals(g, "lint", []string{"-w", "song.rb"}); strings.Join(got, " ") != "song.rb" || !g.Watch {
 		t.Fatalf("lint: got %v, watch=%v", got, g.Watch)
 	}
 }
@@ -114,5 +114,18 @@ func TestSwitchValues(t *testing.T) {
 	}
 	if _, err := parse(fs, []string{"--no-synths=false"}); err != nil || !b.val {
 		t.Fatalf("--no-synths=false: %+v %v", b, err)
+	}
+}
+
+// TestEveryCommandListsItsGlobals keeps commandGlobals complete, so a new
+// command does not fall back to offering every shared flag.
+func TestEveryCommandListsItsGlobals(t *testing.T) {
+	for _, c := range commands {
+		if _, ok := commandGlobals[c.name]; !ok {
+			t.Errorf("%s is missing from commandGlobals", c.name)
+		}
+	}
+	if code := Main([]string{"--json", "volume"}); code != ExitUsage {
+		t.Errorf("--json volume: exit %d", code)
 	}
 }
