@@ -1,0 +1,4 @@
+[submodule "external/sonic-pi"]
+	path = external/sonic-pi
+	url = https://github.com/sonic-pi-net/sonic-pi.git
+	shallow = true
