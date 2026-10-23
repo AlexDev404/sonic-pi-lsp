@@ -22,7 +22,7 @@ if [ ! -f "$APP/server/ruby/bin/daemon.rb" ]; then
   echo "external/sonic-pi is empty: run git submodule update --init --recursive" >&2
   exit 1
 fi
-if [ -f "$APP/external/supersonic/.git" ] || [ -d "$APP/external/supersonic/.git" ] || [ -n "$(ls -A "$APP/external/supersonic" 2>/dev/null)" ]; then :; elif grep -q supersonic "$SP/.gitmodules" 2>/dev/null; then
+if grep -q 'app/external/supersonic' "$SP/.gitmodules" 2>/dev/null && [ ! -f "$APP/external/supersonic/CMakeLists.txt" ]; then
   echo "app/external/supersonic is empty: run git submodule update --init --recursive" >&2
   exit 1
 fi
