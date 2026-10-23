@@ -51,6 +51,15 @@ func setPref(st *prefs.Store, key, value string) error {
 	return st.Set(s, value)
 }
 
+// volumeKey is the desktop's volume setting: Sonic Pi 5's output fader, or
+// 4.x's single volume slider.
+func volumeKey() string {
+	if paths.CurrentLayout().Major >= 5 {
+		return "output-volume"
+	}
+	return "system-vol"
+}
+
 func cmdVolume(g *Globals, args []string) error {
 	fs := newFlags(g, "volume", "sonicpi volume [0-100]")
 	pos, err := parse(fs, args)
@@ -61,20 +70,20 @@ func cmdVolume(g *Globals, args []string) error {
 	if err != nil {
 		return err
 	}
+	key := volumeKey()
 	if len(pos) == 0 {
-		fmt.Println(st.Int("system-vol"))
+		fmt.Println(st.Int(key))
 		return nil
 	}
 	v, err := strconv.Atoi(pos[0])
 	if err != nil || v < 0 || v > 100 {
 		return usageError("volume takes a number from 0 to 100")
 	}
-	if err := setPref(st, "system-vol", strconv.Itoa(v)); err != nil {
+	if err := setPref(st, key, strconv.Itoa(v)); err != nil {
 		return err
 	}
 	if c, err := control.Dial(); err == nil {
-		// The desktop maps its 0-100 slider onto an amp of 0-2.
-		return spider(c, "/mixer-amp", control.Float(float64(v)/100*2), control.Int(0))
+		return c.Call("apply-prefs", nil, nil)
 	}
 	return nil
 }
@@ -93,7 +102,8 @@ func cmdMixer(g *Globals, args []string) error {
 	limiter.register(fs, "limiter", "the final limiter (on by default)")
 	slide := fs.Float64("slide", 0, "slide filter changes over this many beats")
 	reset := fs.Bool("reset", false, "reset the filters and limiter to their defaults")
-	amp := fs.Float64("amp", -1, "set the mixer amp directly (0-2) without saving it")
+	amp := fs.Float64("amp", -1, "set the mixer amp directly (0-2) without saving it (Sonic Pi 4)")
+	drive := fs.Int("drive", -1, "drive: gain before the limiter in percent, 100 is unity (saved; Sonic Pi 5)")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
@@ -114,6 +124,11 @@ func cmdMixer(g *Globals, args []string) error {
 			return err
 		}
 	}
+	if *drive >= 0 {
+		if err := setPref(st, "drive-pct", strconv.Itoa(*drive)); err != nil {
+			return err
+		}
+	}
 	var ctl []string
 	add := func(on bool, opt string) {
 		if on {
@@ -126,16 +141,19 @@ func cmdMixer(g *Globals, args []string) error {
 	add(*noLPF, "lpf: 135.5")
 	add(limiter.set, fmt.Sprintf("limiter_bypass: %d", map[bool]int{true: 0, false: 1}[limiter.val]))
 	add(len(ctl) > 0 && *slide > 0, fmt.Sprintf("hpf_slide: %g, lpf_slide: %g", *slide, *slide))
-	nothing := !*mono && !*stereo && !invert.set && len(ctl) == 0 && !*reset && *amp < 0
+	nothing := !*mono && !*stereo && !invert.set && len(ctl) == 0 && !*reset && *amp < 0 && *drive < 0
 	if nothing {
-		fmt.Printf("mono:   %v\ninvert: %v\nvolume: %d\n", st.Bool("mixer-force-mono"), st.Bool("mixer-invert-stereo"), st.Int("system-vol"))
+		fmt.Printf("mono:   %v\ninvert: %v\nvolume: %d\n", st.Bool("mixer-force-mono"), st.Bool("mixer-invert-stereo"), st.Int(volumeKey()))
+		if paths.CurrentLayout().Major >= 5 {
+			fmt.Printf("drive:  %d%%\n", st.Int("drive-pct"))
+		}
 		return nil
 	}
 	c, err := connect(g)
 	if err != nil {
 		return err
 	}
-	if *mono || *stereo || invert.set {
+	if *mono || *stereo || invert.set || *drive >= 0 {
 		if err := c.Call("apply-prefs", nil, nil); err != nil {
 			return err
 		}
@@ -217,11 +235,12 @@ func cmdRecord(g *Globals, args []string) error {
 	case <-sig:
 	case <-done:
 	}
+	took := time.Since(start).Round(time.Second)
 	if err := saveRecording(c, file); err != nil {
 		return err
 	}
 	if !g.Quiet {
-		fmt.Fprintf(os.Stderr, "Saved %s of audio to %s\n", time.Since(start).Round(time.Second), file)
+		fmt.Fprintf(os.Stderr, "Saved %s of audio to %s\n", took, file)
 	}
 	return nil
 }

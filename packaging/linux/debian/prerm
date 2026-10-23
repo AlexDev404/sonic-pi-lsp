@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+if [ "$1" = "remove" ] && command -v systemctl >/dev/null 2>&1; then
+  systemctl --global disable sonicpid.service >/dev/null 2>&1 || true
+  if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+    systemctl --user -M "$SUDO_USER@" stop sonicpid.service >/dev/null 2>&1 || true
+  fi
+fi
+exit 0

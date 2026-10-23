@@ -1,0 +1,202 @@
+name: Release
+
+# Builds the CLI with the bundled Sonic Pi for Linux and Windows whenever a
+# tag is pushed (creating a GitHub release creates its tag), then attaches
+# the packages to the release of that tag, creating the release if the tag
+# was pushed without one. Run it by hand to rebuild a tag's packages.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and attach packages to (e.g. v1.0.0)"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  linux:
+    name: Linux (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The Ruby extensions are built for each distribution's own Ruby.
+        os: [ubuntu-24.04, ubuntu-22.04]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config git ruby ruby-dev libssl-dev \
+            libaubio-dev libasound2-dev libjack-jackd2-dev libpipewire-0.3-dev libudev-dev \
+            libfreetype-dev libcurl4-openssl-dev dpkg-dev file
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build the Sonic Pi server
+        run: scripts/build-server-linux.sh
+
+      - name: Package
+        run: scripts/package-linux.sh "$TAG" "${{ matrix.os }}"
+
+      - name: Check the package
+        run: |
+          deb=$(ls dist/*.deb)
+          dpkg-deb --info "$deb"
+          sudo apt-get install -y "./$deb"
+          sonicpi version
+          sonicpi doctor || true
+          printf 'use_synth :prophet\nplay 60\n' > ok.rb
+          sonicpi lint --use-defaults ok.rb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.os }}
+          path: dist/*
+          if-no-files-found: error
+
+  windows:
+    name: Windows
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          submodules: recursive
+
+      # The Ruby the server runs on is bundled into the package, as the
+      # desktop's Windows release does.
+      - uses: ruby/setup-ruby@v1
+        id: ruby
+        with:
+          ruby-version: "3.4"
+
+      - name: Install gems
+        run: gem install rugged --no-document
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Bundle Ruby
+        shell: bash
+        run: |
+          native=external/sonic-pi/app/server/native
+          rm -rf "$native/ruby"
+          cp -r "${{ steps.ruby.outputs.ruby-prefix }}" "$native/ruby"
+          rm -rf "$native/ruby/msys64" "$native/ruby/share/doc" "$native/ruby/share/ri"
+          "$native/ruby/bin/ruby.exe" -e 'require "rugged"; puts "Ruby #{RUBY_VERSION}, rugged #{Rugged::VERSION}"'
+
+      # Sonic Pi's own CI does this: vcpkg's ports must not find the MSYS2
+      # cmake that setup-ruby puts on PATH.
+      - name: Hide MSYS2
+        shell: bash
+        run: |
+          [ -d /c/msys64 ] && mv /c/msys64 /c/__msys64 || true
+          find /c/hostedtoolcache -type d -name msys64 -print0 2>/dev/null | xargs -0 -I{} mv {} {}.__hidden || true
+
+      - name: vcpkg (libsndfile for aubio)
+        shell: cmd
+        run: call external\sonic-pi\app\win-pre-vcpkg.bat
+
+      - name: Build the Sonic Pi server (aubio_onset, SuperSonic)
+        shell: cmd
+        run: |
+          cmake -S external/sonic-pi/app/external -B build/external -A x64 ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_TOOLCHAIN_FILE=%CD%/external/sonic-pi/app/vcpkg/scripts/buildsystems/vcpkg.cmake ^
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static-md
+          if errorlevel 1 exit /b 1
+          cmake --build build/external --config Release
+          if errorlevel 1 exit /b 1
+          dir external\sonic-pi\app\server\native
+
+      - name: Build sonicpi.exe and sonicpid.exe
+        shell: bash
+        run: |
+          CGO_ENABLED=0 go build -trimpath \
+            -ldflags "-s -w -X github.com/AlexDev404/sonic-pi-lsp/internal/version.Version=$TAG" \
+            -o build/bin/ ./cmd/sonicpi ./cmd/sonicpid
+
+      - name: Stage
+        shell: bash
+        run: scripts/stage.sh build/package/sonicpi-cli
+
+      - name: Installer and zip
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
+            choco install nsis -y --no-progress
+            $env:PATH = "C:\Program Files (x86)\NSIS;$env:PATH"
+          }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $ver = $env:TAG.TrimStart('v')
+          $src = Resolve-Path build/package/sonicpi-cli
+          $out = Join-Path (Resolve-Path dist) "sonicpi-cli_${ver}_windows_x64_installer.exe"
+          makensis /V3 "/DVERSION=$ver" "/DSRC=$src" "/DOUT=$out" packaging/windows/sonicpi.nsi
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Compress-Archive -Path build/package/sonicpi-cli -DestinationPath "dist/sonicpi-cli_${ver}_windows_x64.zip"
+          Get-ChildItem dist
+
+      - name: Check the build
+        shell: bash
+        run: |
+          build/package/sonicpi-cli/sonicpi.exe version
+          printf 'use_synth :prophet\nplay 60\n' > ok.rb
+          build/package/sonicpi-cli/sonicpi.exe lint --use-defaults ok.rb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Attach to the release
+    needs: [linux, windows]
+    # Publish whatever built, so one failing Linux flavour does not hold
+    # back the rest.
+    if: ${{ !cancelled() && needs.windows.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes
+          fi
+          gh release upload "$TAG" dist/* --clobber

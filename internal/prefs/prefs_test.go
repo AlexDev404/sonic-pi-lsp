@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/AlexDev404/sonic-pi-lsp/internal/paths"
 )
 
 const desktopINI = `[General]
@@ -126,5 +128,19 @@ func TestValidate(t *testing.T) {
 	}
 	if s, err := Lookup("gui.prefs/whatever"); err != nil || s.Name != "prefs/whatever" {
 		t.Errorf("raw key: %+v %v", s, err)
+	}
+}
+
+func TestLayoutFollowsVersion(t *testing.T) {
+	if l := paths.LayoutFor(5); l.GUI != "v5-gui-settings.ini" || l.Audio != "v5-audio-settings.toml" {
+		t.Fatalf("5: %+v", l)
+	}
+	if l := paths.LayoutFor(4); l.GUI != "gui-settings.ini" || l.Audio != "audio-settings.toml" {
+		t.Fatalf("4: %+v", l)
+	}
+	vol, _ := Lookup("system-vol")
+	out, _ := Lookup("output-volume")
+	if vol.For(5) || !vol.For(4) || !out.For(5) || out.For(4) {
+		t.Fatal("version gating")
 	}
 }

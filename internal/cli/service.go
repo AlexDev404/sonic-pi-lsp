@@ -186,16 +186,19 @@ func cmdStatus(g *Globals, args []string) error {
 	fmt.Printf("Service:   sonicpid %s, pid %d, %s mode (%s)\n", st.Version, st.PID, st.Mode, svcmgr.Status())
 	if st.SonicPiVersion != "" {
 		v := "Sonic Pi " + st.SonicPiVersion
-		if st.LatestVersion != "" && st.LatestVersion != st.SonicPiVersion {
+		if knownVersion(st.LatestVersion) && st.LatestVersion != st.SonicPiVersion {
 			v += " (latest: " + st.LatestVersion + ")"
 		}
 		fmt.Printf("Version:   %s on %s\n", v, st.Platform)
 	}
 	fmt.Printf("Root:      %s\n", st.Root)
 	fmt.Printf("Logs:      %s\n           %s\n", st.LogDir, st.ServerLogDir)
-	if st.Ports.GUISend != 0 {
+	if st.Ports.GUISend != 0 && st.Ports.Tau != 0 {
 		fmt.Printf("Ports:     server %d, gui %d, OSC cues %d, scsynth %d, Tau %d, daemon %d\n",
 			st.Ports.GUISend, st.Ports.GUIListen, st.Ports.OSCCues, st.Ports.Scsynth, st.Ports.Tau, st.Ports.Daemon)
+	} else if st.Ports.GUISend != 0 {
+		fmt.Printf("Ports:     server %d, gui %d, OSC cues %d, engine %d, daemon %d\n",
+			st.Ports.GUISend, st.Ports.GUIListen, st.Ports.OSCCues, st.Ports.Scsynth, st.Ports.Daemon)
 	}
 	if st.Scsynth != "" {
 		fmt.Printf("Audio:     %s\n", strings.ReplaceAll(strings.TrimSpace(st.Scsynth), "\n", "\n           "))
@@ -219,14 +222,37 @@ func cmdReboot(g *Globals, args []string) error {
 	if err != nil {
 		return err
 	}
+	var before control.Status
+	if err := c.Call("status", nil, &before); err != nil {
+		return err
+	}
 	if err := c.Call("restart", nil, nil); err != nil {
 		return err
 	}
-	time.Sleep(time.Second)
+	if !g.Quiet {
+		fmt.Fprintln(os.Stderr, "Rebooting Sonic Pi...")
+	}
+	// Wait for the next boot to begin, then for it to finish.
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		var st control.Status
+		if err := c.Call("status", nil, &st); err != nil {
+			return err
+		}
+		if st.Boots > before.Boots {
+			break
+		}
+		if time.Now().After(deadline) {
+			return errors.New("the server did not restart")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
 	if _, err := connect(g); err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, "Sonic Pi has rebooted.")
+	if !g.Quiet {
+		fmt.Fprintln(os.Stderr, "Sonic Pi has rebooted.")
+	}
 	return nil
 }
 
@@ -238,9 +264,7 @@ func cmdVersion(g *Globals, args []string) error {
 	}
 	out := map[string]string{"cli": version.Version, "os": runtime.GOOS + "/" + runtime.GOARCH}
 	if root, err := paths.Root(); err == nil {
-		if b, err := os.ReadFile(filepath.Join(root, "app", "server", "ruby", "lib", "sonicpi", "runtime.rb")); err == nil {
-			out["bundled"] = parseRubyVersion(string(b))
-		}
+		out["bundled"] = paths.Version(root)
 	}
 	if c, err := control.Dial(); err == nil {
 		if *check {
@@ -265,38 +289,12 @@ func cmdVersion(g *Globals, args []string) error {
 	}
 	if v := out["server"]; v != "" {
 		fmt.Printf("Sonic Pi %s running", v)
-		if l := out["latest"]; l != "" && l != v {
+		if l := out["latest"]; knownVersion(l) && l != v {
 			fmt.Printf(" (latest release: %s)", l)
 		}
 		fmt.Println()
 	}
 	return nil
-}
-
-func parseRubyVersion(src string) string {
-	// runtime.rb sets the server's version: @version = Version.new(4, 6, 0)
-	for _, l := range strings.Split(src, "\n") {
-		l = strings.TrimSpace(l)
-		if i := strings.Index(l, "Version.new("); i >= 0 && strings.HasPrefix(l, "@version =") {
-			args := strings.TrimSuffix(strings.TrimSpace(l[i+len("Version.new("):]), ")")
-			parts := strings.Split(args, ",")
-			var nums []string
-			for _, p := range parts {
-				p = strings.Trim(strings.TrimSpace(p), `"'`)
-				if p != "" {
-					nums = append(nums, p)
-				}
-			}
-			if len(nums) >= 3 {
-				v := strings.Join(nums[:3], ".")
-				if len(nums) > 3 {
-					v += "-" + nums[3]
-				}
-				return v
-			}
-		}
-	}
-	return ""
 }
 
 func cmdDoctor(g *Globals, args []string) error {
@@ -310,30 +308,43 @@ func cmdDoctor(g *Globals, args []string) error {
 		if !good {
 			mark, ok = "FAIL", false
 		}
-		fmt.Printf("[%s] %-22s %s\n", mark, name, detail)
+		fmt.Printf("[%s] %-24s %s\n", mark, name, detail)
 	}
-	warn := func(name, detail string) { fmt.Printf("[warn] %-20s %s\n", name, detail) }
+	warn := func(name, detail string) { fmt.Printf("[warn] %-24s %s\n", name, detail) }
 
 	root, err := paths.Root()
 	check("Sonic Pi server", err == nil, orErr(root, err))
 	ruby := paths.Ruby(root)
 	out, err := exec.Command(ruby, "-e", "print RUBY_VERSION").Output()
 	check("Ruby", err == nil, orErr(ruby+" "+string(out), err))
+	major := 5
 	if root != "" {
-		tau := filepath.Join(root, "app", "server", "beam", "tau", "_build", "prod", "rel", "tau")
-		_, err := os.Stat(tau)
-		check("Tau (MIDI, Link, OSC)", err == nil, orErr(tau, err))
+		major = paths.Major(root)
+		fmt.Printf("[info] %-24s %s\n", "Sonic Pi version", paths.Version(root))
+		native := filepath.Join(root, "app", "server", "native")
+		if major >= 5 {
+			engine := filepath.Join(native, "sonic-pi-supersonic")
+			if runtime.GOOS == "windows" {
+				engine = filepath.Join(native, "Sonic Pi - SuperSonic.exe")
+			}
+			_, err := os.Stat(engine)
+			check("SuperSonic audio engine", err == nil, orErr(engine, err))
+		} else {
+			tau := filepath.Join(root, "app", "server", "beam", "tau", "_build", "prod", "rel", "tau")
+			_, err := os.Stat(tau)
+			check("Tau (MIDI, Link, OSC)", err == nil, orErr(tau, err))
+			scsynth := "scsynth"
+			if runtime.GOOS == "windows" {
+				scsynth = filepath.Join(native, "scsynth.exe")
+			}
+			p, err := exec.LookPath(scsynth)
+			check("scsynth", err == nil, orErr(p, err))
+		}
 		syn := filepath.Join(root, "etc", "synthdefs", "compiled")
-		_, err = os.Stat(syn)
+		_, err := os.Stat(syn)
 		check("Synthdefs", err == nil, orErr(syn, err))
 	}
-	scsynth := "scsynth"
-	if runtime.GOOS == "windows" && root != "" {
-		scsynth = filepath.Join(root, "app", "server", "native", "scsynth.exe")
-	}
-	p, err := exec.LookPath(scsynth)
-	check("scsynth", err == nil, orErr(p, err))
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == "linux" && major < 5 {
 		// The boot daemon starts scsynth through PipeWire's JACK layer.
 		p, err := exec.LookPath("pw-jack")
 		check("PipeWire JACK (pw-jack)", err == nil, orErr(p, err))
@@ -345,15 +356,15 @@ func cmdDoctor(g *Globals, args []string) error {
 	check("Linter", err == nil, orErr(lint, err))
 	exe, err := svcmgr.DaemonExe()
 	check("sonicpid", err == nil, orErr(exe, err))
-	fmt.Printf("[info] %-20s %s: %s\n", "Service manager", svcmgr.Describe(), svcmgr.Status())
-	fmt.Printf("[info] %-20s %s\n", "Config", paths.ConfigDir())
-	fmt.Printf("[info] %-20s %s\n", "Log", logDir())
+	fmt.Printf("[info] %-24s %s: %s\n", "Service manager", svcmgr.Describe(), svcmgr.Status())
+	fmt.Printf("[info] %-24s %s\n", "Config", paths.ConfigDir())
+	fmt.Printf("[info] %-24s %s\n", "Log", logDir())
 	if c, err := control.Dial(); err == nil {
 		var st control.Status
 		c.Call("status", nil, &st)
 		check("Server", st.State == control.StateRunning, st.State+" "+st.Error)
 	} else {
-		fmt.Printf("[info] %-20s %s\n", "Service", "not running (starts on demand)")
+		fmt.Printf("[info] %-24s %s\n", "Service", "not running (starts on demand)")
 	}
 	if !ok {
 		return errSilent
@@ -366,4 +377,10 @@ func orErr(s string, err error) string {
 		return err.Error()
 	}
 	return strings.TrimSpace(s)
+}
+
+// knownVersion is false for the placeholder the server reports before it
+// has checked for updates.
+func knownVersion(v string) bool {
+	return v != "" && v != "v0.0" && v != "0.0" && v != "v0"
 }

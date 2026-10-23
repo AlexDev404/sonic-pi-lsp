@@ -198,15 +198,18 @@ func cmdLink(g *Globals, args []string) error {
 	if err != nil {
 		return err
 	}
-	tau := func(addr string, a ...control.Arg) error {
-		return c.Call("send", control.SendArgs{Target: control.ToTau, Address: addr, Args: a}, nil)
+	st, err := status(c)
+	if err != nil {
+		return err
 	}
+	// Sonic Pi 5 runs Link in its SuperSonic engine; 4.x in Tau.
+	v5 := st.Ports.Tau == 0
+	send := func(target, addr string, a ...control.Arg) error {
+		return c.Call("send", control.SendArgs{Target: target, Address: addr, Args: a}, nil)
+	}
+	tau := func(addr string, a ...control.Arg) error { return send(control.ToTau, addr, a...) }
 	switch sub {
 	case "status":
-		st, err := status(c)
-		if err != nil {
-			return err
-		}
 		if st.LinkBPM == "" {
 			fmt.Println("No Link activity seen yet. `sonicpi link enable`, or use_bpm :link in code.")
 			return nil
@@ -214,10 +217,19 @@ func cmdLink(g *Globals, args []string) error {
 		fmt.Printf("bpm:   %s\npeers: %s\n", st.LinkBPM, st.LinkPeers)
 		return nil
 	case "enable", "on":
+		if v5 {
+			return send(control.ToEngine, "/clock/visibility", control.Int(2)) // network wide
+		}
 		return tau("/link-enable")
 	case "disable", "off":
+		if v5 {
+			return send(control.ToEngine, "/clock/visibility", control.Int(0))
+		}
 		return tau("/link-disable")
 	case "reset":
+		if v5 {
+			return usageError("link reset is a Sonic Pi 4 command; use link disable and link enable")
+		}
 		return tau("/link-reset")
 	case "bpm", "tempo":
 		if len(pos) != 2 {
@@ -226,6 +238,9 @@ func cmdLink(g *Globals, args []string) error {
 		bpm, err := strconv.ParseFloat(pos[1], 64)
 		if err != nil || bpm < 20 || bpm > 999 {
 			return usageError("the tempo must be a number from 20 to 999")
+		}
+		if v5 {
+			return send(control.ToEngine, "/clock/tempo/set", control.Float(bpm))
 		}
 		return tau("/link-set-tempo", control.Float(bpm))
 	}

@@ -78,14 +78,17 @@ func Run(ctx context.Context, o Options) error {
 	}
 
 	sup.notice("sonicpid %s started (pid %d, mode %s, logs in %s)", o.Version, st.PID, o.Mode, logDir)
+	// The control socket stays open until the server has shut down, so
+	// `sonicpi service stop` can wait for the whole shutdown.
+	serveCtx, stopServing := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		srv.Serve(ctx)
+		srv.Serve(serveCtx)
 	}()
 	sup.Run(ctx)
-	cancel()
+	stopServing()
 	wg.Wait()
 	sup.notice("sonicpid stopped")
 	return nil

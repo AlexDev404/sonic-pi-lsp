@@ -119,7 +119,7 @@ func cmdFmt(g *Globals, args []string) error {
 
 // lintBeforeRun lints file and fails if it has errors (warnings pass).
 func lintBeforeRun(g *Globals, file string) error {
-	code, err := rubyTool(g, []string{"lint", "--fail-on", "error", "--quiet", file})
+	code, err := rubyTool(g, []string{"lint", "--use-defaults", "--fail-on", "error", "--quiet", file})
 	if err != nil {
 		return err
 	}

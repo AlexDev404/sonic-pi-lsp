@@ -1,0 +1,24 @@
+#!/bin/sh
+# Sets up the session log directory and enables the Sonic Pi service for
+# every user: it is a systemd user unit, so it runs inside each user's
+# login session, where their audio is.
+set -e
+
+if [ "$1" = "configure" ]; then
+  # Each user's service logs to /var/log/sonic-pi/<user>. Sticky and world
+  # writable, like /tmp, so a user can create (only) their own directory.
+  mkdir -p /var/log/sonic-pi
+  chmod 1777 /var/log/sonic-pi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl --global enable sonicpid.service >/dev/null 2>&1 || true
+    # Start it now for the user who installed the package, when there is a
+    # session to start it in (systemd 248+). Everyone else gets it at their
+    # next login, or on demand the first time they run sonicpi.
+    if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+      systemctl --user -M "$SUDO_USER@" daemon-reload >/dev/null 2>&1 || true
+      systemctl --user -M "$SUDO_USER@" start sonicpid.service >/dev/null 2>&1 || true
+    fi
+  fi
+fi
+exit 0

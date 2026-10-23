@@ -72,6 +72,10 @@ module Splint
     end
 
     def read_version(server)
+      # Sonic Pi 5 keeps its version in a VERSION file; 4.x in runtime.rb.
+      file = File.join(@root, "VERSION")
+      return File.read(file).strip if File.file?(file)
+
       src = File.read(File.join(server, "lib/sonicpi/runtime.rb"))
       m = src.match(/^\s*@version = Version\.new\(([^)]*)\)/)
       m ? m[1].split(",").map { |s| s.strip.delete('"\'') }.join(".") : "unknown"

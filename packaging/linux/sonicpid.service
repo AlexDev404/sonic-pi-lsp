@@ -1,0 +1,15 @@
+[Unit]
+Description=Sonic Pi CLI service (sonicpid)
+Documentation=https://github.com/AlexDev404/sonic-pi-lsp
+# Audio comes from the user's session (PipeWire, PulseAudio or JACK).
+After=pipewire.service pipewire-pulse.service wireplumber.service sound.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/sonicpid run --mode service
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

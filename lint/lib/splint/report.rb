@@ -128,8 +128,19 @@ module Splint
 
     module_function
 
+    # Sonic Pi 5 vendors the beautifier as ruby-beautify-legacy
+    # (RBeautifyLegacy); 4.x as ruby-beautify (RBeautify).
+    def beautifier
+      @beautifier ||= begin
+        require "ruby-beautify-legacy"
+        RBeautifyLegacy
+      rescue LoadError
+        require "ruby-beautify"
+        RBeautify
+      end
+    end
+
     def beautify(_knowledge, source)
-      require "ruby-beautify"
       return source if source.strip.empty?
 
       final_newline = source.end_with?("\n")
@@ -137,7 +148,7 @@ module Splint
       buf = lines.join
       buf << "\n" unless buf.end_with?("\n")
       buf = buf.gsub(%r{\)/}, ") ___SONIC_PI_RND_TMP_PLACEHOLDER___ /").gsub(%r{\]/}, "] ___SONIC_PI_SQR_TMP_PLACEHOLDER___ /")
-      res = RBeautify.beautify_string(:ruby, buf)
+      res = beautifier.beautify_string(:ruby, buf)
       res = res.gsub(") ___SONIC_PI_RND_TMP_PLACEHOLDER___ /", ")/").gsub("] ___SONIC_PI_SQR_TMP_PLACEHOLDER___ /", "]/")
       out = res.lines.map { |l| l.include?(TMP) ? "\n" : l }.join
       out = out.chomp

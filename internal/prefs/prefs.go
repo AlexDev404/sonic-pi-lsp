@@ -50,6 +50,25 @@ type Setting struct {
 	Max     *float64
 	Effect  Effect
 	Doc     string
+	// Major limits a setting to one Sonic Pi major version: 4 for 4.x only,
+	// 5 for 5 and later, 0 for every version.
+	Major int
+}
+
+// For reports whether the setting applies to a Sonic Pi major version.
+func (s Setting) For(major int) bool {
+	switch s.Major {
+	case 0:
+		return true
+	case 4:
+		return major < 5
+	}
+	return major >= s.Major
+}
+
+func only(major int, s Setting) Setting {
+	s.Major = major
+	return s
 }
 
 func f(v float64) *float64 { return &v }
@@ -66,10 +85,18 @@ func audio(name, kind string, doc string) Setting {
 var Known = func() []Setting {
 	vol := gui("prefs/system-vol", "int", "80", Live, "Main volume, 0-100 (the desktop's volume slider)")
 	vol.Min, vol.Max = f(0), f(100)
+	out := gui("prefs/output-volume", "int", "100", Live, "Volume: the fader after the limiter, 0-100")
+	out.Min, out.Max = f(0), f(100)
+	drive := gui("prefs/drive-pct", "int", "192", Live, "Drive: gain before the limiter, in percent (100 is unity, 25-400)")
+	drive.Min, drive.Max = f(25), f(400)
 	ch := gui("prefs/midi-default-channel", "int", "0", NextRun, "Default MIDI out channel: 0 for all (*), or 1-16")
 	ch.Min, ch.Max = f(0), f(16)
+	rate := gui("prefs/audio-sample-rate", "int", "0", Restart, "Sample rate, 0 for the device's own")
+	buf := gui("prefs/audio-buffer-size", "int", "0", Restart, "Audio buffer size in frames, 0 for the device's own")
 	return []Setting{
-		vol,
+		only(4, vol),
+		only(5, out),
+		only(5, drive),
 		gui("prefs/log-synths", "bool", "true", NextRun, "Log each synth and sample triggered"),
 		gui("prefs/log-cues", "bool", "false", NextRun, "Log cues (cue, sync, live_loop and incoming OSC/MIDI)"),
 		gui("prefs/check-args", "bool", "true", NextRun, "Safe mode: check synth and FX opts before they reach scsynth"),
@@ -82,6 +109,12 @@ var Known = func() []Setting {
 		gui("prefs/mixer-force-mono", "bool", "false", Live, "Mix the output down to mono"),
 		gui("prefs/mixer-invert-stereo", "bool", "false", Live, "Swap the left and right channels"),
 		gui("prefs/enable-scsynth-inputs", "bool", "false", Restart, "Enable audio inputs (sound_in, live_audio)"),
+		only(5, gui("prefs/audio-output-device", "string", "", Restart, "Output device name (empty for the system default; see `sonicpi audio devices`)")),
+		only(5, gui("prefs/audio-input-device", "string", "", Restart, "Input device name (empty for none)")),
+		only(5, gui("prefs/audio-driver", "string", "", Restart, "Audio driver (ALSA, JACK, Windows Audio, ASIO...; empty for the default)")),
+		only(5, rate),
+		only(5, buf),
+		only(5, gui("prefs/gamepad-enable", "bool", "true", Live, "Enable gamepad input")),
 		gui("prefs/rp/check-updates", "bool", "true", Live, "Check for new Sonic Pi releases"),
 		gui("prefs/clear-output-on-run", "bool", "true", DesktopOnly, "Clear the log when code is run"),
 		gui("prefs/auto-indent-on-run", "bool", "true", DesktopOnly, "Auto-align code when it is run (see `sonicpi fmt`)"),
@@ -194,7 +227,7 @@ func Load(root string) (*Store, error) {
 	}
 	tmpl := ""
 	if root != "" {
-		tmpl = filepath.Join(root, "app", "config", "user-examples", "audio-settings.toml")
+		tmpl = filepath.Join(root, "app", "config", "user-examples", paths.CurrentLayout().Audio)
 	}
 	a, err := LoadTOML(paths.AudioSettingsPath(), tmpl)
 	if err != nil {

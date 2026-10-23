@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -38,6 +39,7 @@ type Supervisor struct {
 	Version string
 	Mode    string
 
+	major     int // the Sonic Pi major version being run
 	mu        sync.Mutex
 	state     string
 	bootErr   string
@@ -49,6 +51,7 @@ type Supervisor struct {
 	daemon    *osc.Client
 	tau       *osc.Client
 	cues      *osc.Client
+	engine    *osc.TCPClient
 	booted    time.Time
 	boots     int
 	started   time.Time
@@ -68,6 +71,7 @@ func New(root string, log *logfile.Writer, version, mode string) *Supervisor {
 		Log:     log,
 		Version: version,
 		Mode:    mode,
+		major:   paths.Major(root),
 		state:   control.StateStopped,
 		started: time.Now(),
 		info:    map[string]string{},
@@ -227,10 +231,7 @@ func (s *Supervisor) session(ctx context.Context) error {
 	s.setState(control.StateBooting, "")
 
 	daemonPath := filepath.Join(s.Root, "app", "server", "ruby", "bin", "daemon.rb")
-	args := []string{daemonPath}
-	if !st.Bool("enable-scsynth-inputs") {
-		args = append(args, "--no-scsynth-inputs")
-	}
+	args := append([]string{daemonPath}, daemonArgs(st, s.major)...)
 	cmd := exec.Command(s.Ruby, args...)
 	cmd.Dir = filepath.Dir(daemonPath)
 	cmd.Env = os.Environ()
@@ -307,8 +308,13 @@ func (s *Supervisor) session(ctx context.Context) error {
 		killTree(cmd)
 		return ctx.Err()
 	}
-	ports := control.Ports{Daemon: n[0], GUIListen: n[1], GUISend: n[2], Scsynth: n[3], OSCCues: n[4], Tau: n[5], TauPhx: n[6]}
-	token := int32(n[7])
+	// Sonic Pi 5: daemon gui-listen gui-send engine osc-cues token.
+	// Sonic Pi 4: daemon gui-listen gui-send scsynth osc-cues tau tau-phx token.
+	ports := control.Ports{Daemon: n[0], GUIListen: n[1], GUISend: n[2], Scsynth: n[3], OSCCues: n[4]}
+	if len(n) == 8 {
+		ports.Tau, ports.TauPhx = n[5], n[6]
+	}
+	token := int32(n[len(n)-1])
 
 	// Everything else the daemon prints goes to the log.
 	go func() {
@@ -337,18 +343,36 @@ func (s *Supervisor) session(ctx context.Context) error {
 			}
 		}
 	}()
+	var engine *osc.TCPClient
+	if s.major >= 5 {
+		engine = osc.NewTCPClient("127.0.0.1", ports.Scsynth)
+		defer engine.Close()
+	}
 	s.mu.Lock()
-	s.ports, s.token, s.gui, s.spider, s.daemon, s.tau, s.cues = ports, token, gui, spider, daemon, tau, cues
+	s.ports, s.token, s.gui, s.spider, s.daemon, s.tau, s.cues, s.engine = ports, token, gui, spider, daemon, tau, cues, engine
 	s.mu.Unlock()
 
 	acked := make(chan struct{})
 	var ackOnce sync.Once
+	serverGone := make(chan string, 1)
 	go gui.Serve(func(m *osc.Message) {
 		if m.Address == "/ack" {
 			ackOnce.Do(func() { close(acked) })
 			return
 		}
-		s.record(m)
+		if m.Address == "/exited" || m.Address == "/exited-with-boot-error" {
+			why := "the Ruby server exited"
+			if m.Address == "/exited-with-boot-error" {
+				why = "the Ruby server failed to boot: " + strings.TrimSpace(m.Str(0))
+			}
+			select {
+			case serverGone <- why:
+			default:
+			}
+		}
+		if !s.record(m) {
+			return // a device list or Link state that has not changed
+		}
 		if e := events.FromOSC(m, time.Now()); e != nil {
 			s.emit(e)
 		}
@@ -363,6 +387,10 @@ func (s *Supervisor) session(ctx context.Context) error {
 	go s.every(pingCtx, 500*time.Millisecond, func() { spider.Send("/ping", token, "sonicpid") })
 	select {
 	case <-acked:
+	case why := <-serverGone:
+		stopPing()
+		s.shutdownDaemon(cmd, daemon, token, exited)
+		return fmt.Errorf("%s (see %s)", why, paths.ServerLogDir())
 	case err := <-exited:
 		stopPing()
 		return fmt.Errorf("the boot daemon exited while the server was booting: %v (see %s)", err, paths.ServerLogDir())
@@ -387,6 +415,9 @@ func (s *Supervisor) session(ctx context.Context) error {
 	s.notice("Sonic Pi server is running (ports: gui %d, server %d, cues %d)", ports.GUIListen, ports.GUISend, ports.OSCCues)
 
 	select {
+	case why := <-serverGone:
+		s.shutdownDaemon(cmd, daemon, token, exited)
+		return errors.New(why)
 	case err := <-exited:
 		return fmt.Errorf("the boot daemon exited: %v", err)
 	case <-sessionCh:
@@ -394,6 +425,7 @@ func (s *Supervisor) session(ctx context.Context) error {
 		s.shutdownDaemon(cmd, daemon, token, exited)
 		return errors.New("restart requested")
 	case <-ctx.Done():
+		s.setState(control.StateStopping, "")
 		s.notice("Shutting down the Sonic Pi server")
 		s.shutdownDaemon(cmd, daemon, token, exited)
 		return ctx.Err()
@@ -426,33 +458,44 @@ func (s *Supervisor) every(ctx context.Context, d time.Duration, fn func()) {
 	}
 }
 
-// record keeps the latest of the facts `sonicpi status` reports.
-func (s *Supervisor) record(m *osc.Message) {
+// record keeps the latest of the facts `sonicpi status` reports. It
+// returns false for a MIDI port list or Link state that has not changed,
+// which the server resends often and which is not worth logging again.
+func (s *Supervisor) record(m *osc.Message) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	keep := func(key, v string) bool {
+		old, seen := s.info[key]
+		s.info[key] = v
+		return !seen || old != v
+	}
+	switch m.Address {
+	case "/midi/in-ports", "midi/in-ports":
+		return keep("midi/in-ports", m.Str(0))
+	case "/midi/out-ports", "midi/out-ports":
+		return keep("midi/out-ports", m.Str(0))
+	case "/link-bpm", "/link-num-peers":
+		return keep(m.Address, m.Str(0))
+	}
 	switch m.Address {
 	case "/version":
 		s.info["version"] = m.Str(0)
 		s.info["latest_version"] = m.Str(2)
 		s.info["platform"] = m.Str(7)
-	case "/scsynth/info":
+	case "/scsynth/info", "/supersonic/info":
 		s.info["scsynth"] = m.Str(0)
-	case "/midi/in-ports", "midi/in-ports":
-		s.info["midi/in-ports"] = m.Str(0)
-	case "/midi/out-ports", "midi/out-ports":
-		s.info["midi/out-ports"] = m.Str(0)
-	case "/link-bpm", "/link-num-peers":
-		s.info[m.Address] = m.Str(0)
 	}
+	return true
 }
 
-// parsePorts reads the daemon's port line: seven ports and a token.
+// parsePorts reads the daemon's port line: its ports and then a token,
+// five ports for Sonic Pi 5 and seven for 4.x.
 func parsePorts(l string) []int {
 	fields := strings.Fields(l)
-	if len(fields) != 8 {
+	if len(fields) != 6 && len(fields) != 8 {
 		return nil
 	}
-	n := make([]int, 8)
+	n := make([]int, len(fields))
 	for i, f := range fields {
 		v, err := strconv.ParseInt(f, 10, 64)
 		if err != nil {
@@ -482,6 +525,13 @@ func (s *Supervisor) Send(target, address string, args ...any) error {
 		c = s.tau
 	case control.ToCues:
 		c = s.cues
+	case control.ToEngine:
+		e := s.engine
+		s.mu.Unlock()
+		if state != control.StateRunning || e == nil {
+			return ErrNotBooted
+		}
+		return e.Send(address, args...)
 	default:
 		s.mu.Unlock()
 		return fmt.Errorf("unknown target %q", target)
@@ -514,16 +564,81 @@ func boolMsg(on bool, yes, no string) string {
 // ApplyPrefs sends the server the preferences that take effect live, as the
 // desktop does when it boots and when its preferences change.
 func (s *Supervisor) ApplyPrefs(st *prefs.Store, silent bool) {
-	quiet := 0
+	quiet := int32(0)
 	if silent {
 		quiet = 1
 	}
-	vol := float32(st.Int("system-vol")) / 100 * 2
-	s.Send(control.ToSpider, "/mixer-amp", vol, int32(quiet))
-	s.Send(control.ToSpider, boolMsg(st.Bool("midi-enable"), "/midi-start", "/midi-stop"), int32(quiet))
+	if s.major >= 5 {
+		vol := float32(st.Int("output-volume")) / 100
+		s.Send(control.ToSpider, "/mixer-output-volume", vol, quiet)
+		s.Send(control.ToSpider, "/mixer-drive", float32(DriveAmount(drivePct(st))), quiet)
+		s.Send(control.ToSpider, boolMsg(st.Bool("gamepad-enable"), "/gamepad-start", "/gamepad-stop"), quiet)
+	} else {
+		// 4.x maps its 0-100 slider onto an amp of 0-2.
+		vol := float32(st.Int("system-vol")) / 100 * 2
+		s.Send(control.ToSpider, "/mixer-amp", vol, quiet)
+	}
+	s.Send(control.ToSpider, boolMsg(st.Bool("midi-enable"), "/midi-start", "/midi-stop"), quiet)
 	s.Send(control.ToSpider, boolMsg(st.Bool("osc-enabled"), "/cue-port-start", "/cue-port-stop"))
 	s.Send(control.ToSpider, boolMsg(st.Bool("osc-public"), "/cue-port-external", "/cue-port-internal"))
 	s.Send(control.ToSpider, boolMsg(st.Bool("mixer-invert-stereo"), "/mixer-invert-stereo", "/mixer-standard-stereo"))
 	s.Send(control.ToSpider, boolMsg(st.Bool("mixer-force-mono"), "/mixer-mono-mode", "/mixer-stereo-mode"))
 	s.Send(control.ToSpider, boolMsg(st.Bool("rp/check-updates"), "/enable-update-checking", "/disable-update-checking"))
+}
+
+// drivePct reads the drive setting. Like the desktop, a settings file from
+// 4.x (with system-vol but no drive-pct) carries its volume over as drive.
+func drivePct(st *prefs.Store) int {
+	d, _ := prefs.Lookup("drive-pct")
+	if _, set := st.Get(d); !set {
+		v, _ := prefs.Lookup("system-vol")
+		if _, old := st.Get(v); old {
+			return int(float64(st.Int("system-vol")) * 2.4)
+		}
+	}
+	return st.Int("drive-pct")
+}
+
+// DriveAmount converts a drive percentage (100 = unity) into the 0-1
+// amount set_drive! takes: 0 is a quarter, 0.5 unity and 1 four times.
+func DriveAmount(pct int) float64 {
+	gain := float64(pct) / 100
+	if gain < 0.25 {
+		gain = 0.25
+	}
+	return math.Log(gain/0.25) / math.Log(16)
+}
+
+// daemonArgs are the boot daemon's flags: audio inputs off unless enabled,
+// and from Sonic Pi 5 the desktop's saved audio device choices.
+func daemonArgs(st *prefs.Store, major int) []string {
+	var args []string
+	if !st.Bool("enable-scsynth-inputs") {
+		args = append(args, "--no-scsynth-inputs")
+	}
+	if major < 5 {
+		return args
+	}
+	get := func(key string) string {
+		s, _ := prefs.Lookup(key)
+		v, _ := st.Get(s)
+		return strings.TrimSpace(v)
+	}
+	// The desktop's sentinels mean "no particular device".
+	if v := get("audio-output-device"); v != "" && v != "__system__" {
+		args = append(args, "--audio-output", v)
+	}
+	if v := get("audio-input-device"); v != "" && v != "__none__" && v != "__disabled__" {
+		args = append(args, "--audio-input", v)
+	}
+	if n := st.Int("audio-sample-rate"); n > 0 {
+		args = append(args, "--audio-sample-rate", strconv.Itoa(n))
+	}
+	if n := st.Int("audio-buffer-size"); n > 0 {
+		args = append(args, "--audio-buffer-size", strconv.Itoa(n))
+	}
+	if v := get("audio-driver"); v != "" {
+		args = append(args, "--audio-driver", v)
+	}
+	return args
 }

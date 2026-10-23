@@ -1,0 +1,73 @@
+name: CI
+
+# Fast checks on every push and pull request: the Go code on Linux and
+# Windows, and the linter against the bundled Sonic Pi.
+on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    steps:
+      # The linter reads Sonic Pi's Ruby server; the audio engine's own
+      # submodule is not needed for tests.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Go test
+        run: go test ./...
+
+      - name: Cross-compile for the other platform
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then GOOS=linux go build ./...; else GOOS=windows go build ./...; fi
+
+      - name: Linter tests
+        run: ruby -EUTF-8 lint/test/test_splint.rb
+
+      - name: CLI smoke test
+        shell: bash
+        run: |
+          go build -o build/bin/ ./cmd/sonicpi ./cmd/sonicpid
+          B=build/bin/sonicpi
+          $B version
+          $B lint --list-rules > /dev/null
+          printf 'use_synth :prophet\nplay 60, release: 2\nsleep 1\n' > ok.rb
+          $B lint --use-defaults ok.rb
+          printf 'use_synth :prophett\n' > bad.rb
+          if $B lint --use-defaults bad.rb; then echo "lint should have failed"; exit 1; fi
+          $B fmt --check ok.rb
+          $B config list > /dev/null
+
+  gofmt:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: test -z "$(gofmt -l cmd internal)" || (gofmt -l cmd internal; exit 1)

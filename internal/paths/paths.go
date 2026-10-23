@@ -7,7 +7,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
+	"strings"
+	"sync"
 )
 
 // UserDir mirrors SonicPi::Paths.user_dir in the Ruby server, so the CLI,
@@ -38,20 +42,91 @@ func SonicPiHome() string { return filepath.Join(UserDir(), ".sonic-pi") }
 // ConfigDir is ~/.sonic-pi/config, the desktop client's configuration.
 func ConfigDir() string { return filepath.Join(SonicPiHome(), "config") }
 
-// GUISettingsPath is the desktop client's preferences file.
-func GUISettingsPath() string { return filepath.Join(ConfigDir(), "gui-settings.ini") }
+// Layout names the desktop's configuration files, which Sonic Pi 5 renamed
+// with a v5- prefix so they do not clash with a 4.x install's.
+type Layout struct {
+	Major     int
+	GUI       string
+	Audio     string
+	Theme     string
+	Shortcuts string
+}
 
-// AudioSettingsPath is scsynth's configuration, read by the boot daemon.
-func AudioSettingsPath() string { return filepath.Join(ConfigDir(), "audio-settings.toml") }
+// LayoutFor returns the file names for a Sonic Pi major version.
+func LayoutFor(major int) Layout {
+	if major >= 5 {
+		return Layout{major, "v5-gui-settings.ini", "v5-audio-settings.toml", "v5-colour-theme.properties", "v5-keyboard-shortcuts.ini"}
+	}
+	return Layout{major, "gui-settings.ini", "audio-settings.toml", "colour-theme.properties", "keyboard-shortcuts.ini"}
+}
+
+var (
+	layoutOnce sync.Once
+	layout     Layout
+)
+
+// CurrentLayout is the layout of the bundled Sonic Pi (Sonic Pi 5's when
+// none can be found).
+func CurrentLayout() Layout {
+	layoutOnce.Do(func() {
+		major := 5
+		if root, err := Root(); err == nil {
+			major = Major(root)
+		}
+		layout = LayoutFor(major)
+	})
+	return layout
+}
+
+// Version reads the version of the Sonic Pi tree at root: its VERSION file
+// (Sonic Pi 5), or the version runtime.rb sets (4.x).
+func Version(root string) string {
+	if b, err := os.ReadFile(filepath.Join(root, "VERSION")); err == nil {
+		return strings.TrimSpace(string(b))
+	}
+	b, err := os.ReadFile(filepath.Join(root, "app", "server", "ruby", "lib", "sonicpi", "runtime.rb"))
+	if err != nil {
+		return ""
+	}
+	m := regexp.MustCompile(`(?m)^\s*@version = Version\.new\(([^)]*)\)`).FindStringSubmatch(string(b))
+	if m == nil {
+		return ""
+	}
+	var parts []string
+	for _, p := range strings.Split(m[1], ",") {
+		if p = strings.Trim(strings.TrimSpace(p), `"'`); p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return strings.Join(parts, ".")
+}
+
+// Major is the major version of the Sonic Pi tree at root (5 if unknown).
+func Major(root string) int {
+	v := Version(root)
+	if i := strings.IndexAny(v, ".-"); i > 0 {
+		v = v[:i]
+	}
+	if n, err := strconv.Atoi(v); err == nil && n > 0 {
+		return n
+	}
+	return 5
+}
+
+// GUISettingsPath is the desktop client's preferences file.
+func GUISettingsPath() string { return filepath.Join(ConfigDir(), CurrentLayout().GUI) }
+
+// AudioSettingsPath is the audio engine's configuration, read by the boot daemon.
+func AudioSettingsPath() string { return filepath.Join(ConfigDir(), CurrentLayout().Audio) }
 
 // InitPath is the code run when the server boots.
 func InitPath() string { return filepath.Join(ConfigDir(), "init.rb") }
 
 // ColourThemePath is the desktop client's theme overrides.
-func ColourThemePath() string { return filepath.Join(ConfigDir(), "colour-theme.properties") }
+func ColourThemePath() string { return filepath.Join(ConfigDir(), CurrentLayout().Theme) }
 
 // ShortcutsPath is the desktop client's keyboard shortcuts.
-func ShortcutsPath() string { return filepath.Join(ConfigDir(), "keyboard-shortcuts.ini") }
+func ShortcutsPath() string { return filepath.Join(ConfigDir(), CurrentLayout().Shortcuts) }
 
 // TauSettingsPath is Tau's configuration, read by the boot daemon.
 func TauSettingsPath() string { return filepath.Join(ConfigDir(), "tau-settings.toml") }
@@ -158,8 +233,13 @@ func LintDir() (string, error) {
 	return "", errors.New("cannot find the linter (lint/splint.rb): set SONICPI_LINT_DIR")
 }
 
-// Ruby returns the Ruby interpreter to run Sonic Pi with. Like the server
-// itself, it prefers the Ruby bundled under app/server/native/ruby.
+// RubyPathFile, next to the Sonic Pi tree, names the Ruby a package's
+// native extensions were built for (Linux packages use the system Ruby).
+const RubyPathFile = "ruby.path"
+
+// Ruby returns the Ruby interpreter to run Sonic Pi with: $SONICPI_RUBY,
+// the Ruby bundled under app/server/native/ruby (as on Windows), the one
+// named in ruby.path, or ruby on PATH.
 func Ruby(root string) string {
 	if v := os.Getenv("SONICPI_RUBY"); v != "" {
 		return v
@@ -172,6 +252,13 @@ func Ruby(root string) string {
 		p := filepath.Join(root, "app", "server", "native", "ruby", "bin", name)
 		if _, err := os.Stat(p); err == nil {
 			return p
+		}
+		if b, err := os.ReadFile(filepath.Join(filepath.Dir(root), RubyPathFile)); err == nil {
+			if p := strings.TrimSpace(string(b)); p != "" {
+				if _, err := os.Stat(p); err == nil {
+					return p
+				}
+			}
 		}
 	}
 	return name

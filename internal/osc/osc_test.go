@@ -1,6 +1,9 @@
 package osc
 
 import (
+	"encoding/binary"
+	"io"
+	"net"
 	"reflect"
 	"testing"
 	"time"
@@ -77,6 +80,43 @@ func TestUDP(t *testing.T) {
 	select {
 	case m := <-got:
 		if n, _ := m.Int(0); n != 42 || m.Str(1) != "hello" {
+			t.Fatalf("got %v", m)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout")
+	}
+}
+
+func TestTCPFrames(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	got := make(chan *Message, 1)
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		var size [4]byte
+		if _, err := io.ReadFull(c, size[:]); err != nil {
+			return
+		}
+		b := make([]byte, binary.BigEndian.Uint32(size[:]))
+		io.ReadFull(c, b)
+		ms, _ := Decode(b)
+		got <- ms[0]
+	}()
+	cl := NewTCPClient("127.0.0.1", ln.Addr().(*net.TCPAddr).Port)
+	defer cl.Close()
+	if err := cl.Send("/clock/tempo/set", float32(128)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case m := <-got:
+		if m.Address != "/clock/tempo/set" || m.Args[0] != float32(128) {
 			t.Fatalf("got %v", m)
 		}
 	case <-time.After(2 * time.Second):

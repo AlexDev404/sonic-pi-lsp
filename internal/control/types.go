@@ -8,10 +8,11 @@ import (
 
 // Server states.
 const (
-	StateBooting = "booting"
-	StateRunning = "running"
-	StateFailed  = "failed"
-	StateStopped = "stopped"
+	StateBooting  = "booting"
+	StateRunning  = "running"
+	StateFailed   = "failed"
+	StateStopped  = "stopped"
+	StateStopping = "stopping"
 )
 
 // Ports are the ones the boot daemon allocated.
@@ -129,6 +130,7 @@ const (
 	ToTau    = "tau"    // Tau's API (Link, MIDI, OSC out)
 	ToDaemon = "daemon" // the boot daemon; the token is added as the first argument
 	ToCues   = "cues"   // the OSC cue port, as an external device would send
+	ToEngine = "engine" // Sonic Pi 5's SuperSonic engine (Link, clock), over TCP
 )
 
 // SendArgs sends one OSC message.

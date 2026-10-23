@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"text/tabwriter"
@@ -137,7 +138,7 @@ func templatePath(root string) string {
 	if root == "" {
 		return ""
 	}
-	return root + "/app/config/user-examples/audio-settings.toml"
+	return filepath.Join(root, "app", "config", "user-examples", paths.CurrentLayout().Audio)
 }
 
 func configList(g *Globals, st *prefs.Store, all bool) error {
@@ -151,8 +152,9 @@ func configList(g *Globals, st *prefs.Store, all bool) error {
 		Doc     string `json:"doc,omitempty"`
 	}
 	var rows []row
+	major := paths.CurrentLayout().Major
 	for _, s := range prefs.Known {
-		if s.Effect == prefs.DesktopOnly && !all {
+		if !s.For(major) || (s.Effect == prefs.DesktopOnly && !all) {
 			continue
 		}
 		v, set := st.Get(s)

@@ -71,13 +71,18 @@ func cmdRepl(g *Globals, args []string) error {
 
 	var mu sync.Mutex
 	logOn := true
+	tty := isTerminal(os.Stdin) && isTerminal(os.Stdout)
 	go func() {
 		for e := range s.events {
 			mu.Lock()
 			if logOn {
-				fmt.Print("\r\x1b[K")
+				if tty {
+					fmt.Print("\r\x1b[K")
+				}
 				s.show(e)
-				fmt.Print("sonicpi> ")
+				if tty {
+					fmt.Print("sonicpi> ")
+				}
 			}
 			mu.Unlock()
 		}
@@ -94,13 +99,18 @@ func cmdRepl(g *Globals, args []string) error {
 		}
 		run(string(b))
 	}
-	fmt.Println(`Sonic Pi REPL. Type code and press enter to play it; blocks run when closed.
+	if tty {
+		fmt.Println(`Sonic Pi REPL. Type code and press enter to play it; blocks run when closed.
 .help for commands, .stop (or .) to stop, .quit to leave.`)
+	}
 	in := bufio.NewScanner(os.Stdin)
 	in.Buffer(make([]byte, 1<<20), 1<<20)
 	var buf []string
 	level := 0
 	prompt := func() {
+		if !tty {
+			return
+		}
 		mu.Lock()
 		if level > 0 {
 			fmt.Print("    ...> ")
