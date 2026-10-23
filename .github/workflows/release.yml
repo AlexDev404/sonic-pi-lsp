@@ -4,9 +4,19 @@ name: Release
 # tag is pushed (creating a GitHub release creates its tag), then attaches
 # the packages to the release of that tag, creating the release if the tag
 # was pushed without one. Run it by hand to rebuild a tag's packages.
+#
+# Pushes to branches that change the packaging (or Sonic Pi itself) build
+# the packages as a check, without publishing anything.
 on:
   push:
     tags: ["v*"]
+    branches: ["**"]
+    paths:
+      - ".github/workflows/release.yml"
+      - "scripts/**"
+      - "packaging/**"
+      - "external/**"
+      - ".gitmodules"
   workflow_dispatch:
     inputs:
       tag:
@@ -17,11 +27,13 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  group: release-${{ github.event.inputs.tag || github.ref }}
   cancel-in-progress: false
 
 env:
-  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  # A branch build gets a development version instead of a tag.
+  TAG: ${{ github.event.inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name) || format('v0.0.0-dev.{0}', github.run_number) }}
+  REF: ${{ github.event.inputs.tag || github.sha }}
 
 jobs:
   linux:
@@ -35,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ env.REF }}
           submodules: recursive
 
       - name: Install build dependencies
@@ -80,7 +92,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ env.REF }}
           submodules: recursive
 
       # The Ruby the server runs on is bundled into the package, as the
@@ -177,7 +189,7 @@ jobs:
     needs: [linux, windows]
     # Publish whatever built, so one failing Linux flavour does not hold
     # back the rest.
-    if: ${{ !cancelled() && needs.windows.result == 'success' }}
+    if: ${{ !cancelled() && needs.windows.result == 'success' && (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')) }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
