@@ -67,6 +67,7 @@ type runFlags struct {
 	midiChannel int
 }
 
+// register adds every flag of run, eval and buffer run.
 func (r *runFlags) register(fs *flag.FlagSet) {
 	fs.BoolVar(&r.detach, "detach", false, "send the code and return at once; it keeps playing")
 	fs.BoolVar(&r.detach, "d", false, "shorthand for --detach")
@@ -75,6 +76,12 @@ func (r *runFlags) register(fs *flag.FlagSet) {
 	fs.DurationVar(&r.linger, "linger", 0, "keep listening this long after all runs complete (default 2s with --record)")
 	fs.StringVar(&r.record, "record", "", "record the output to this `FILE` (.wav)")
 	fs.BoolVar(&r.noStop, "no-stop", false, "on Ctrl-C, leave the music playing instead of stopping it")
+	r.registerSession(fs)
+}
+
+// registerSession adds the flags that shape the log and the preferences
+// code runs with, which the REPL takes too.
+func (r *runFlags) registerSession(fs *flag.FlagSet) {
 	fs.BoolVar(&r.timestamps, "timestamps", false, "prefix log lines with the time")
 	r.synths.register(fs, "synths", "log synth and sample triggers (default: the log-synths setting)")
 	r.cues.register(fs, "cues", "log cues and incoming OSC/MIDI (default: the log-cues setting)")

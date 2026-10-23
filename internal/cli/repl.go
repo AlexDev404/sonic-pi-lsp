@@ -50,7 +50,7 @@ func depth(line string) int {
 func cmdRepl(g *Globals, args []string) error {
 	fs := newFlags(g, "repl", "sonicpi repl [FILE]")
 	var r runFlags
-	r.register(fs)
+	r.registerSession(fs)
 	pos, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -64,6 +64,7 @@ func cmdRepl(g *Globals, args []string) error {
 		return err
 	}
 	s := newSession(g, c, r.filter(st), "repl", "")
+	s.timestamps = r.timestamps
 	if err := s.open(); err != nil {
 		return err
 	}

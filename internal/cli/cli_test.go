@@ -92,6 +92,16 @@ func TestHelpForEveryCommand(t *testing.T) {
 			t.Fatalf("%s help:\n%s", c.name, out)
 		}
 	}
+	// The REPL takes the log and preference flags, not the playback ones.
+	g := &Globals{}
+	fs := newFlags(g, "repl", "sonicpi repl [FILE]")
+	var r runFlags
+	r.registerSession(fs)
+	var b strings.Builder
+	printUsage(&b, fs, "sonicpi repl [FILE]")
+	if out := b.String(); strings.Contains(out, "--detach") || strings.Contains(out, "--record") || !strings.Contains(out, "--synths, --no-synths") {
+		t.Fatalf("repl help:\n%s", out)
+	}
 }
 
 func TestSwitchValues(t *testing.T) {
