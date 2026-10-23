@@ -6,6 +6,7 @@ This repository is a command-line Sonic Pi:
 - `lint/`: the Ruby linter and formatter.
 - `external/sonic-pi`: the Sonic Pi server, as a git submodule.
 - `patches/`: the changes this repository makes to that submodule.
+- `external/sonicpi-grandpiano`: the `:grandpiano` synth, as a git submodule.
 
 Most tasks need no running server, so don't build or boot one unless your
 task needs one:
@@ -119,13 +120,22 @@ checks that the patches still apply. Refresh any patch that doesn't.
 
 ### patches/grandpiano.patch
 
-This patch adds `:grandpiano`, an additive piano synth that uses only core
-UGens, so it runs on SuperSonic:
+This patch registers `:grandpiano`, an additive piano synth that uses only
+core UGens, so it runs on SuperSonic. It adds `SynthGrandPiano` to
+`app/server/ruby/lib/sonicpi/synths/synthinfo.rb`.
 
-- `etc/synthdefs/compiled/sonic-pi-grandpiano.scsyndef`.
-- `SynthGrandPiano` in `app/server/ruby/lib/sonicpi/synths/synthinfo.rb`.
+The synthdef itself isn't in the patch. It comes from the
+`external/sonicpi-grandpiano` submodule (AlexDev404/sonicpi-grandpiano).
+`scripts/apply-patches.sh` copies that repository's `grandpiano.scsyndef`
+to `etc/synthdefs/compiled/sonic-pi-grandpiano.scsyndef`, using
+`scripts/synthdef-rename.rb`. On the way it renames the def to
+`sonic-pi-grandpiano` and its `decay` parameter to `decay_scale`.
 
-The synthdef's `decay` parameter is renamed to `decay_scale`. It is a
-stretch factor, and Sonic Pi treats an opt named `decay` as an envelope
-time: it scales it by the BPM and subtracts it in `duration:`. Only `amp`
-and `pan` are control-rate, so only they are marked modulatable.
+- **Why `decay_scale`.** The opt is a stretch factor, and Sonic Pi treats an opt named `decay` as an envelope time: it scales it by the BPM and subtracts it in `duration:`.
+- **Modulatable opts.** Only `amp` and `pan` are control-rate, so only they are marked modulatable.
+- **Taking a new build of the synth:**
+  1. Run `git submodule update --remote external/sonicpi-grandpiano`.
+  2. Run `scripts/apply-patches.sh`.
+  3. Commit the new submodule pointer.
+
+  If the new build adds or renames opts, update `SynthGrandPiano` in the patch to match.

@@ -20,7 +20,9 @@ release tag (now **v5.0.0**). Moving to a new release is one script; see
 [Updating Sonic Pi](#updating-sonic-pi). The builds apply
 [`patches/`](patches) to it. For now that is one patch, which adds a
 built-in `:grandpiano` synth: an additive grand piano measured from a
-sampled Yamaha C5.
+sampled Yamaha C5. The synth itself is the
+[`external/sonicpi-grandpiano`](https://github.com/AlexDev404/sonicpi-grandpiano)
+submodule.
 
 ## Contents
 

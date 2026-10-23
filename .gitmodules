@@ -3,3 +3,7 @@
 	url = https://github.com/sonic-pi-net/sonic-pi.git
 	shallow = true
 	ignore = dirty
+[submodule "external/sonicpi-grandpiano"]
+	path = external/sonicpi-grandpiano
+	url = https://github.com/AlexDev404/sonicpi-grandpiano.git
+	shallow = true
