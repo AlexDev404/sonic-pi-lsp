@@ -4,6 +4,7 @@
 #   scripts/update-sonic-pi.sh           the newest release tag (vX.Y.Z)
 #   scripts/update-sonic-pi.sh v5.0.0    a given tag
 #
+# It checks that patches/ still applies: refresh any patch that does not.
 # Then build, test and commit the new submodule pointer:
 #   scripts/build-server-linux.sh && make test
 #   git commit -am "Sonic Pi vX.Y.Z"
@@ -23,4 +24,5 @@ git -C "$SP" fetch --depth 1 origin tag "$TAG"
 git -C "$SP" checkout -q "$TAG"
 git -C "$SP" submodule update --init --recursive --depth 1
 git -C "$ROOT" add external/sonic-pi
+"$ROOT/scripts/apply-patches.sh"
 echo "external/sonic-pi is now at $(git -C "$SP" describe --tags). Build and test, then commit."

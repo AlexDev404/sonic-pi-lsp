@@ -27,6 +27,9 @@ if grep -q 'app/external/supersonic' "$SP/.gitmodules" 2>/dev/null && [ ! -f "$A
   exit 1
 fi
 
+echo "==> patches/"
+"$ROOT/scripts/apply-patches.sh"
+
 echo "==> Ruby native extensions (Ruby $(ruby -e 'print RUBY_VERSION'))"
 (cd "$APP" && ruby server/ruby/bin/compile-extensions.rb)
 

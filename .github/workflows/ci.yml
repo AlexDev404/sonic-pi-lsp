@@ -46,6 +46,12 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then GOOS=linux go build ./...; else GOOS=windows go build ./...; fi
 
+      # The linter runs against the patched tree, as the packages ship it.
+      # On Windows this also checks the patches apply to a CRLF checkout.
+      - name: Apply patches/
+        shell: bash
+        run: scripts/apply-patches.sh
+
       - name: Linter tests
         run: ruby -EUTF-8 lint/test/test_splint.rb
 
@@ -56,7 +62,7 @@ jobs:
           B=build/bin/sonicpi
           $B version
           $B lint --list-rules > /dev/null
-          printf 'use_synth :prophet\nplay 60, release: 2\nsleep 1\n' > ok.rb
+          printf 'use_synth :prophet\nplay 60, release: 2\nsleep 1\nsynth :grandpiano, note: :e3, decay_scale: 2\n' > ok.rb
           $B lint --use-defaults ok.rb
           printf 'use_synth :prophett\n' > bad.rb
           if $B lint --use-defaults bad.rb; then echo "lint should have failed"; exit 1; fi

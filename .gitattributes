@@ -1,0 +1,2 @@
+# Applied with git apply; keep them byte for byte (they carry a binary synthdef).
+patches/*.patch -text

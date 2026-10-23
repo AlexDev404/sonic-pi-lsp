@@ -16,6 +16,10 @@ DEST="${1:?usage: stage.sh DEST}"
 EXE=""
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) EXE=".exe" ;; esac
 
+# The patched tree is what gets packaged (build-server-*.sh applies them
+# too; this is for a build that skipped it, such as the Windows job).
+"$ROOT/scripts/apply-patches.sh"
+
 rm -rf "$DEST"
 mkdir -p "$DEST/sonic-pi/app/server" "$DEST/sonic-pi/app/config" "$DEST/sonic-pi/etc/synthdefs"
 

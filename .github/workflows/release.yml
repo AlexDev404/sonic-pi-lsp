@@ -16,6 +16,7 @@ on:
       - "scripts/**"
       - "packaging/**"
       - "external/**"
+      - "patches/**"
       - ".gitmodules"
   workflow_dispatch:
     inputs:
@@ -81,7 +82,7 @@ jobs:
           sudo apt-get install -y "./$deb"
           sonicpi version
           sonicpi doctor || true
-          printf 'use_synth :prophet\nplay 60\n' > ok.rb
+          printf 'use_synth :prophet\nplay 60\nsynth :grandpiano, note: 60, decay_scale: 2\n' > ok.rb
           sonicpi lint --use-defaults ok.rb
 
       - uses: actions/upload-artifact@v5
@@ -188,7 +189,7 @@ jobs:
         shell: bash
         run: |
           build/package/sonicpi-cli/sonicpi.exe version
-          printf 'use_synth :prophet\nplay 60\n' > ok.rb
+          printf 'use_synth :prophet\nplay 60\nsynth :grandpiano, note: 60, decay_scale: 2\n' > ok.rb
           build/package/sonicpi-cli/sonicpi.exe lint --use-defaults ok.rb
 
       - uses: actions/upload-artifact@v5
