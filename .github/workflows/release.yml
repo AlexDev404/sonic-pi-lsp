@@ -95,38 +95,20 @@ jobs:
           ref: ${{ env.REF }}
           submodules: recursive
 
-      # The Ruby the server runs on is bundled into the package, as the
-      # desktop's Windows release does.
-      - uses: ruby/setup-ruby@v1
-        id: ruby
-        with:
-          ruby-version: "3.4"
-
-      - name: Install gems
-        run: gem install rugged --no-document
-
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
-      - name: Bundle Ruby
-        shell: bash
-        run: |
-          native=external/sonic-pi/app/server/native
-          rm -rf "$native/ruby"
-          cp -r "${{ steps.ruby.outputs.ruby-prefix }}" "$native/ruby"
-          rm -rf "$native/ruby/msys64" "$native/ruby/share/doc" "$native/ruby/share/ri"
-          "$native/ruby/bin/ruby.exe" -e 'require "rugged"; puts "Ruby #{RUBY_VERSION}, rugged #{Rugged::VERSION}"'
-
-      # Sonic Pi's own CI does this: vcpkg's ports must not find the MSYS2
-      # cmake that setup-ruby puts on PATH.
+      # The native parts are built before Ruby is installed: RubyInstaller's
+      # MSYS2 toolchain on PATH breaks vcpkg's MSVC builds (its cmake and
+      # tools get picked up). The runner's own MSYS2 is hidden for the same
+      # reason, as Sonic Pi's CI does.
       - name: Hide MSYS2
         shell: bash
         run: |
           [ -d /c/msys64 ] && mv /c/msys64 /c/__msys64 || true
-          find /c/hostedtoolcache -type d -name msys64 -print0 2>/dev/null | xargs -0 -I{} mv {} {}.__hidden || true
 
       - name: vcpkg (libsndfile for aubio)
         shell: cmd
@@ -143,6 +125,31 @@ jobs:
           cmake --build build/external --config Release
           if errorlevel 1 exit /b 1
           dir external\sonic-pi\app\server\native
+
+      # Ruby's native gems (rugged) are built with MSYS2, so it comes back.
+      - name: Restore MSYS2
+        shell: bash
+        run: |
+          [ -d /c/__msys64 ] && mv /c/__msys64 /c/msys64 || true
+
+      # The Ruby the server runs on is bundled into the package, as the
+      # desktop's Windows release does.
+      - uses: ruby/setup-ruby@v1
+        id: ruby
+        with:
+          ruby-version: "3.4"
+
+      - name: Install gems
+        run: gem install rugged --no-document
+
+      - name: Bundle Ruby
+        shell: bash
+        run: |
+          native=external/sonic-pi/app/server/native
+          rm -rf "$native/ruby"
+          cp -r "${{ steps.ruby.outputs.ruby-prefix }}" "$native/ruby"
+          rm -rf "$native/ruby/msys64" "$native/ruby/share/doc" "$native/ruby/share/ri"
+          "$native/ruby/bin/ruby.exe" -e 'require "rugged"; puts "Ruby #{RUBY_VERSION}, rugged #{Rugged::VERSION}"'
 
       - name: Build sonicpi.exe and sonicpid.exe
         shell: bash
