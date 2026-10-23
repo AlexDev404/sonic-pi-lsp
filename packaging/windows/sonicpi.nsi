@@ -11,12 +11,9 @@ Unicode true
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "Sections.nsh"
-!include "StrFunc.nsh"
-!include "WordFunc.nsh"
 !include "FileFunc.nsh"
 !include "x64.nsh"
 
-${StrLoc}
 
 !ifndef VERSION
   !define VERSION "dev"
@@ -30,7 +27,6 @@ ${StrLoc}
 
 !define APPNAME "Sonic Pi CLI"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\SonicPiCLI"
-!define ENVKEY "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
 
 Name "${APPNAME} ${VERSION}"
 OutFile "${OUT}"
@@ -78,16 +74,12 @@ Section "!Sonic Pi CLI (required)" SecCore
 SectionEnd
 
 Section "Add sonicpi to PATH" SecPath
-  ReadRegStr $0 HKLM "${ENVKEY}" "Path"
-  ${StrLoc} $1 "$0" "$INSTDIR" ">"
-  StrCmp $1 "" 0 done
-    StrCmp $0 "" 0 +3
-      WriteRegExpandStr HKLM "${ENVKEY}" "Path" "$INSTDIR"
-      Goto notify
-    WriteRegExpandStr HKLM "${ENVKEY}" "Path" "$0;$INSTDIR"
-  notify:
-    SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=5000
-  done:
+  ; sonicpi.exe edits PATH itself. NSIS strings are cut at 1024 characters,
+  ; so reading and rewriting a long PATH here would lose most of it.
+  nsExec::ExecToLog '"$INSTDIR\sonicpi.exe" setup path add "$INSTDIR"'
+  Pop $0
+  StrCmp $0 "0" +2
+    MessageBox MB_ICONEXCLAMATION|MB_OK "sonicpi could not be added to PATH (exit code $0). Your PATH was not changed; add $INSTDIR to it by hand."
 SectionEnd
 
 Section "Background service (starts with Windows)" SecService
@@ -130,13 +122,8 @@ Section "Uninstall"
   nsExec::ExecToLog '"$INSTDIR\sonicpi.exe" service stop'
   nsExec::ExecToLog '"$INSTDIR\sonicpi.exe" service uninstall'
 
-  ; Take the install directory back out of PATH.
-  ReadRegStr $0 HKLM "${ENVKEY}" "Path"
-  ${WordReplace} "$0" ";$INSTDIR" "" "+" $0
-  ${WordReplace} "$0" "$INSTDIR;" "" "+" $0
-  ${WordReplace} "$0" "$INSTDIR" "" "+" $0
-  WriteRegExpandStr HKLM "${ENVKEY}" "Path" "$0"
-  SendMessage ${HWND_BROADCAST} ${WM_SETTINGCHANGE} 0 "STR:Environment" /TIMEOUT=5000
+  ; Take the install directory back out of PATH (only that entry).
+  nsExec::ExecToLog '"$INSTDIR\sonicpi.exe" setup path remove "$INSTDIR"'
 
   RMDir /r "$INSTDIR"
   DeleteRegKey HKLM "${UNINSTKEY}"
